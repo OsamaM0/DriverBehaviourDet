@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+
+# Models / artifacts
+*.plan
+*.engine
+triton/model_repository/*/[0-9]*/model.plan
+output_onnx/
+
+# IDE
+.vscode/
+.idea/
+
+# Tests
+.coverage
+.pytest_cache/
+htmlcov/
+
+# OS
+.DS_Store
+
+# Models
+*.pth
+*.onnx

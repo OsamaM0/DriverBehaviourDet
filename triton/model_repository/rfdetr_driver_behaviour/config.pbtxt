@@ -1,0 +1,26 @@
+# TensorRT plan (FP16) variant of the RF-DETR detector.
+# Build with: bash triton/scripts/onnx_to_trt.sh
+# Then place the resulting model.plan in version directory `1/`.
+
+name: "rfdetr_driver_behaviour"
+platform: "tensorrt_plan"
+max_batch_size: 16
+
+dynamic_batching {
+  preferred_batch_size: [4, 8, 16]
+  max_queue_delay_microseconds: 8000
+}
+
+instance_group [
+  {
+    count: 2
+    kind: KIND_GPU
+  }
+]
+
+# Pin shapes for safety once you know your ONNX I/O names + dims.
+# input  [{ name: "input", data_type: TYPE_FP16, dims: [3, 576, 576] }]
+# output [
+#   { name: "logits", data_type: TYPE_FP16, dims: [-1, -1] },
+#   { name: "boxes",  data_type: TYPE_FP16, dims: [-1, 4]  }
+# ]

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: driver-analytics
+description: Cloud-native driver behaviour analytics (ingest + Triton + fusion + alerts + api)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

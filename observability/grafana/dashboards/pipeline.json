@@ -1,0 +1,56 @@
+{
+  "title": "Driver Analytics — Pipeline",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "type": "stat", "title": "Frames ingested /s",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "sum(rate(ingest_frames_total[1m]))" }]
+    },
+    {
+      "type": "stat", "title": "Ingest drop ratio",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "sum(rate(ingest_drops_total[5m])) / clamp_min(sum(rate(ingest_frames_total[5m])), 1)" }]
+    },
+    {
+      "type": "timeseries", "title": "Inference latency p50/p95/p99",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "histogram_quantile(0.5,  sum by (le) (rate(infer_latency_seconds_bucket[5m])))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(infer_latency_seconds_bucket[5m])))", "legendFormat": "p95" },
+        { "expr": "histogram_quantile(0.99, sum by (le) (rate(infer_latency_seconds_bucket[5m])))", "legendFormat": "p99" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Triton batch size",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [{ "expr": "histogram_quantile(0.95, sum by (le) (rate(infer_batch_size_bucket[5m])))" }]
+    },
+    {
+      "type": "timeseries", "title": "GPU util / mem",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "DCGM_FI_DEV_GPU_UTIL", "legendFormat": "util gpu{{gpu}}" },
+        { "expr": "DCGM_FI_DEV_FB_USED",  "legendFormat": "fb gpu{{gpu}}" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Alerts emitted by type",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "targets": [{ "expr": "sum by (type, severity) (rate(alerts_emitted_total[5m]))", "legendFormat": "{{type}}/{{severity}}" }]
+    },
+    {
+      "type": "timeseries", "title": "State transitions",
+      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+      "targets": [{ "expr": "sum by (from_state, to_state) (rate(state_transitions_total[5m]))", "legendFormat": "{{from_state}}->{{to_state}}" }]
+    },
+    {
+      "type": "timeseries", "title": "Kafka consumer lag",
+      "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+      "targets": [{ "expr": "kafka_consumer_lag_records", "legendFormat": "{{topic}}/{{group}}" }]
+    }
+  ]
+}

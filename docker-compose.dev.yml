@@ -1,0 +1,173 @@
+# Local dev stack: brokers, datastores, Triton (CPU mode), MediaMTX (synthetic RTSP),
+# and a minimal observability stack. Production is deployed via Helm; this file is
+# only for laptops / CI integration tests.
+
+name: driver-analytics-dev
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+
+  # ── Broker (Kafka API) ────────────────────────────────────────────────────
+  redpanda:
+    image: redpandadata/redpanda:v24.1.4
+    container_name: redpanda
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=1G
+      - --reserve-memory=0M
+      - --overprovisioned
+      - --node-id=0
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092,EXTERNAL://0.0.0.0:19092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092,EXTERNAL://localhost:19092
+      - --pandaproxy-addr=0.0.0.0:8082
+      - --schema-registry-addr=0.0.0.0:8081
+    ports:
+      - "19092:19092"
+      - "18081:8081"   # schema registry
+      - "18082:8082"   # rest proxy
+      - "19644:9644"   # admin
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *default-logging
+
+  redpanda-console:
+    image: redpandadata/console:v2.6.0
+    depends_on: [redpanda]
+    environment:
+      KAFKA_BROKERS: "redpanda:9092"
+    ports: ["8085:8080"]
+    logging: *default-logging
+
+  # ── Hot state ─────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    command: ["redis-server", "--maxmemory", "1gb", "--maxmemory-policy", "allkeys-lru"]
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+    logging: *default-logging
+
+  # ── Cold state ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: driver_analytics
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+    logging: *default-logging
+
+  minio:
+    image: minio/minio:RELEASE.2024-05-10T01-41-38Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio12345
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+    logging: *default-logging
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-05-09T17-04-24Z
+    depends_on: [minio]
+    entrypoint: >
+      /bin/sh -c "
+      sleep 3 &&
+      mc alias set local http://minio:9000 minio minio12345 &&
+      mc mb -p local/driver-evidence || true &&
+      mc mb -p local/driver-models   || true &&
+      echo 'MinIO buckets ready';
+      "
+    logging: *default-logging
+
+  # ── Synthetic RTSP source for dev/load tests ───────────────────────────────
+  mediamtx:
+    image: bluenviron/mediamtx:1.8.1
+    ports:
+      - "8554:8554"   # RTSP
+      - "8888:8888"   # HLS
+      - "9997:9997"   # API
+    volumes:
+      - ./scripts/load_test/mediamtx.yml:/mediamtx.yml:ro
+    logging: *default-logging
+
+  # ── Triton (CPU mode for laptops; replace image+runtime for GPU) ──────────
+  triton:
+    image: nvcr.io/nvidia/tritonserver:24.04-py3
+    command: >
+      tritonserver
+      --model-repository=/models
+      --strict-model-config=false
+      --log-verbose=1
+      --allow-metrics=true
+      --metrics-port=8002
+    ports:
+      - "8000:8000"   # HTTP
+      - "8001:8001"   # gRPC
+      - "8002:8002"   # metrics
+    volumes:
+      - ./triton/model_repository:/models:ro
+    # Uncomment on GPU hosts:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    logging: *default-logging
+
+  # ── Observability ─────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    ports: ["9090:9090"]
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules.yaml:/etc/prometheus/rules.yaml:ro
+    logging: *default-logging
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    logging: *default-logging
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.100.0
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./observability/otel-collector-config.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    logging: *default-logging
+
+volumes:
+  pgdata:
+  miniodata:

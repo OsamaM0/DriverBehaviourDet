@@ -1,0 +1,43 @@
+# RF-DETR Driver Behaviour — ONNX backend (default, runs on CPU or GPU via CUDA EP).
+# Once you build a TensorRT plan via `triton/scripts/onnx_to_trt.sh`, switch to the
+# `rfdetr_driver_behaviour` model directory which uses the TensorRT backend.
+
+name: "rfdetr_driver_behaviour_onnx"
+platform: "onnxruntime_onnx"
+max_batch_size: 16
+
+# We let Triton infer input/output shapes from the ONNX model itself
+# (--strict-model-config=false). To pin them explicitly, declare here.
+
+dynamic_batching {
+  preferred_batch_size: [4, 8, 16]
+  max_queue_delay_microseconds: 8000        # 8 ms — fits 1–3 s end-to-end SLO
+}
+
+instance_group [
+  {
+    count: 2
+    kind: KIND_GPU      # change to KIND_CPU for laptop/CI dev without GPU
+  }
+]
+
+model_warmup [
+  {
+    name: "warmup_576"
+    batch_size: 1
+    inputs {
+      key: "input"      # NOTE: replace with actual input name from the ONNX model
+      value {
+        data_type: TYPE_FP32
+        dims: [3, 576, 576]
+        zero_data: true
+      }
+    }
+  }
+]
+
+# Optional ORT EP knobs (uncomment if shipping with GPU):
+# parameters [
+#   { key: "execution_providers"
+#     value: { string_value: "[ {\"name\":\"CUDAExecutionProvider\"} ]" } }
+# ]

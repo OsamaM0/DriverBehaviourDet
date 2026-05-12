@@ -1,0 +1,25 @@
+{{- if .Values.keda.enabled }}
+{{- $components := list "ingest" "detector" "face" "fusion" "alerts" "evidence" }}
+{{- range $c := $components }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "driver-analytics.fullname" $ }}-{{ $c }}-scaler
+spec:
+  scaleTargetRef:
+    name: {{ include "driver-analytics.fullname" $ }}-{{ $c }}
+  pollingInterval: 15
+  cooldownPeriod: 60
+  minReplicaCount: 1
+  maxReplicaCount: 20
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: {{ $.Values.keda.kafka.bootstrap }}
+        consumerGroup: {{ $c }}
+        topic: ""               # all topics for this consumer group
+        lagThreshold: "{{ $.Values.keda.kafka.consumerGroupLagThreshold }}"
+        offsetResetPolicy: latest
+{{- end }}
+{{- end }}

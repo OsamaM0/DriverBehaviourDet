@@ -1,0 +1,38 @@
+groups:
+  - name: pipeline-slo
+    interval: 30s
+    rules:
+      - alert: E2ELatencyP95High
+        expr: histogram_quantile(0.95, sum by (le) (rate(infer_latency_seconds_bucket[5m]))) > 0.5
+        for: 10m
+        labels: { severity: warning, slo: latency }
+        annotations:
+          summary: "Inference p95 > 500ms (10m)"
+
+      - alert: KafkaConsumerLagHigh
+        expr: kafka_consumer_lag_records > 1000
+        for: 5m
+        labels: { severity: warning, slo: throughput }
+        annotations:
+          summary: "Kafka consumer lag > 1000 ({{ $labels.topic }}/{{ $labels.group }})"
+
+      - alert: GpuUtilCollapse
+        expr: avg_over_time(DCGM_FI_DEV_GPU_UTIL[10m]) < 5 and on() (sum(rate(infer_requests_total[5m])) > 1)
+        for: 10m
+        labels: { severity: critical, slo: gpu }
+        annotations:
+          summary: "GPU utilisation < 5% while inference traffic active"
+
+      - alert: AlertFalsePositiveBudgetBurn
+        expr: increase(alerts_emitted_total{severity="critical"}[1h]) > 50
+        for: 30m
+        labels: { severity: warning, slo: precision }
+        annotations:
+          summary: "Critical alert volume exceeds budget (>50/h)"
+
+      - alert: IngestDropRateHigh
+        expr: rate(ingest_drops_total[5m]) / clamp_min(rate(ingest_frames_total[5m]), 1) > 0.05
+        for: 10m
+        labels: { severity: warning, slo: capture }
+        annotations:
+          summary: "Ingest drop rate > 5%"

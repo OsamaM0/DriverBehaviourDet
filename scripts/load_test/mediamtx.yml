@@ -1,0 +1,5 @@
+paths:
+  driver_synth:
+    source: publisher
+    sourceProtocol: automatic
+    sourceOnDemand: false

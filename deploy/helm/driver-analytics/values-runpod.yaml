@@ -1,0 +1,37 @@
+# RunPod-specific overrides:
+#   - no LoadBalancer (use ingress + Cloudflare tunnel out-of-band)
+#   - GPU pods sit on the only node; no nodeSelector
+#   - smaller default replica counts (cost-aware)
+
+global:
+  imagePullPolicy: Always
+
+ingest:
+  replicaCount: 1
+detector:
+  replicaCount: 2
+face:
+  replicaCount: 2
+fusion:
+  replicaCount: 1
+alerts:
+  replicaCount: 1
+evidence:
+  replicaCount: 1
+api:
+  replicaCount: 1
+  service:
+    type: ClusterIP
+
+triton:
+  nodeSelector: {}
+  tolerations: []
+  modelRepository:
+    type: s3
+    s3:
+      bucket: driver-models
+      endpoint: ""               # use S3 default
+      region: us-east-1
+
+keda:
+  enabled: false                  # RunPod typically single-node, scale by replicas

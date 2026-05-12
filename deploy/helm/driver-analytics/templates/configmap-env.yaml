@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "driver-analytics.fullname" . }}-env
+  labels:
+    {{- include "driver-analytics.commonLabels" . | nindent 4 }}
+data:
+{{- range $k, $v := .Values.env }}
+  {{ $k }}: {{ $v | quote }}
+{{- end }}

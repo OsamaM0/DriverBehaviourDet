@@ -1,0 +1,11 @@
+{{ include "driver-analytics.workerDeployment" (dict "ctx" . "name" "ingest"   "values" .Values.ingest   "image" "ingest")   }}
+---
+{{ include "driver-analytics.workerDeployment" (dict "ctx" . "name" "detector" "values" .Values.detector "image" "detector") }}
+---
+{{ include "driver-analytics.workerDeployment" (dict "ctx" . "name" "face"     "values" .Values.face     "image" "face")     }}
+---
+{{ include "driver-analytics.workerDeployment" (dict "ctx" . "name" "fusion"   "values" .Values.fusion   "image" "fusion")   }}
+---
+{{ include "driver-analytics.workerDeployment" (dict "ctx" . "name" "alerts"   "values" .Values.alerts   "image" "alerts")   }}
+---
+{{ include "driver-analytics.workerDeployment" (dict "ctx" . "name" "evidence" "values" .Values.evidence "image" "evidence") }}

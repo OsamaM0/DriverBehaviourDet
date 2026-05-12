@@ -1,0 +1,93 @@
+# Default values: assume on-prem K8s with NVIDIA GPU node pool labelled
+# `accelerator: nvidia` and CPU pool unlabelled.
+
+global:
+  imageRegistry: ghcr.io/your-org
+  imageTag: "0.1.0"
+  imagePullPolicy: IfNotPresent
+
+env:
+  KAFKA_BOOTSTRAP: redpanda:9092
+  REDIS_URL: redis://redis:6379/0
+  DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/driver_analytics
+  S3_ENDPOINT: http://minio:9000
+  S3_BUCKET_EVIDENCE: driver-evidence
+  S3_BUCKET_MODELS: driver-models
+  TRITON_URL: triton:8001
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+  LOG_JSON: "true"
+
+ingest:
+  replicaCount: 2
+  resources:
+    requests: { cpu: "500m", memory: "512Mi" }
+    limits:   { cpu: "2",    memory: "2Gi"   }
+  nodeSelector: {}                      # CPU pool
+
+detector:
+  replicaCount: 4
+  resources:
+    requests: { cpu: "500m", memory: "1Gi" }
+    limits:   { cpu: "2",    memory: "2Gi" }
+
+face:
+  replicaCount: 4
+  resources:
+    requests: { cpu: "1", memory: "1Gi" }
+    limits:   { cpu: "2", memory: "2Gi" }
+
+fusion:
+  replicaCount: 2
+  resources:
+    requests: { cpu: "500m", memory: "512Mi" }
+    limits:   { cpu: "2",    memory: "1Gi"   }
+
+alerts:
+  replicaCount: 2
+  resources:
+    requests: { cpu: "200m", memory: "256Mi" }
+
+evidence:
+  replicaCount: 2
+  resources:
+    requests: { cpu: "500m", memory: "512Mi" }
+
+api:
+  replicaCount: 2
+  service:
+    type: ClusterIP
+    port: 8080
+  ingress:
+    enabled: false
+    host: api.driver-analytics.local
+
+triton:
+  enabled: true
+  replicaCount: 1
+  image: nvcr.io/nvidia/tritonserver:24.04-py3
+  modelRepository:
+    type: pvc                           # pvc | s3
+    pvc:
+      storageClass: ""
+      size: 50Gi
+  resources:
+    requests:
+      cpu: "2"
+      memory: "8Gi"
+      nvidia.com/gpu: 1
+    limits:
+      cpu: "8"
+      memory: "16Gi"
+      nvidia.com/gpu: 1
+  nodeSelector:
+    accelerator: nvidia
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+
+keda:
+  enabled: true
+  kafka:
+    bootstrap: redpanda:9092
+    consumerGroupLagThreshold: 200

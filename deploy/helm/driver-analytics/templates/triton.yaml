@@ -1,0 +1,82 @@
+{{- if .Values.triton.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "driver-analytics.fullname" . }}-triton
+  labels:
+    {{- include "driver-analytics.commonLabels" . | nindent 4 }}
+    component: triton
+spec:
+  replicas: {{ .Values.triton.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      component: triton
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        component: triton
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8002"
+    spec:
+      {{- with .Values.triton.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.triton.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: triton
+          image: {{ .Values.triton.image }}
+          args:
+            - tritonserver
+            - --model-repository=/models
+            - --strict-model-config=false
+            - --allow-metrics=true
+            - --metrics-port=8002
+            - --model-control-mode=poll
+            - --repository-poll-secs=10
+          ports:
+            - { name: http,    containerPort: 8000 }
+            - { name: grpc,    containerPort: 8001 }
+            - { name: metrics, containerPort: 8002 }
+          volumeMounts:
+            - { name: models, mountPath: /models }
+          resources: {{ toYaml .Values.triton.resources | nindent 12 }}
+      volumes:
+        - name: models
+          {{- if eq .Values.triton.modelRepository.type "pvc" }}
+          persistentVolumeClaim:
+            claimName: {{ include "driver-analytics.fullname" . }}-triton-models
+          {{- else }}
+          emptyDir: {}        # initContainer should `aws s3 sync` to here in real deploys
+          {{- end }}
+{{- if eq .Values.triton.modelRepository.type "pvc" }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "driver-analytics.fullname" . }}-triton-models
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ .Values.triton.modelRepository.pvc.storageClass | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.triton.modelRepository.pvc.size }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: triton
+spec:
+  ports:
+    - { name: http,    port: 8000, targetPort: http }
+    - { name: grpc,    port: 8001, targetPort: grpc }
+    - { name: metrics, port: 8002, targetPort: metrics }
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    component: triton
+{{- end }}
