@@ -30,7 +30,7 @@ from packages.common.schemas import (
 from packages.fusion.state_machine import StateRecord, Thresholds, commit, evaluate
 from packages.fusion.temporal_window import WindowStore
 
-log = bootstrap("fusion")
+log = bootstrap("fusion", metrics_port=9104)
 
 GROUP_ID = "fusion"
 WINDOW_MS = 5000

@@ -11,6 +11,11 @@ __pycache__/
 triton/model_repository/*/[0-9]*/model.plan
 output_onnx/
 
+# Runtime directories (inside project)
+models/
+logs/
+data/
+
 # IDE
 .vscode/
 .idea/

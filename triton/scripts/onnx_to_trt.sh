@@ -18,19 +18,24 @@ INPUT_HW="${INPUT_HW:-3x576x576}"
 MIN_BS="${MIN_BS:-1}"
 OPT_BS="${OPT_BS:-8}"
 MAX_BS="${MAX_BS:-16}"
+WORKSPACE_MB="${WORKSPACE_MB:-4096}"  # trtexec workspace in MB
+NO_TF32="${NO_TF32:-false}"           # set to true to add --noTF32 flag
 
 mkdir -p "$(dirname "$OUT_PLAN")"
+
+_no_tf32_flag=""
+[[ "$NO_TF32" == "true" ]] && _no_tf32_flag="--noTF32"
 
 trtexec \
   --onnx="$ONNX_PATH" \
   --saveEngine="$OUT_PLAN" \
   --fp16 \
-  --workspace=4096 \
+  --workspace="$WORKSPACE_MB" \
   --minShapes="${INPUT_NAME}":"${MIN_BS}x${INPUT_HW}" \
   --optShapes="${INPUT_NAME}":"${OPT_BS}x${INPUT_HW}" \
   --maxShapes="${INPUT_NAME}":"${MAX_BS}x${INPUT_HW}" \
   --useCudaGraph \
-  --noTF32
+  ${_no_tf32_flag:+--noTF32}
 
 echo "Built TRT plan → $OUT_PLAN"
 echo "Run parity check:  python triton/scripts/verify_parity.py"

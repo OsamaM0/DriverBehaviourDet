@@ -17,7 +17,7 @@ from packages.common.obs import bootstrap
 from packages.common.schemas import Alert
 from packages.storage.postgres.dao import insert_alert_idempotent
 
-log = bootstrap("alerts")
+log = bootstrap("alerts", metrics_port=9105)
 
 GROUP_ID = "alerts"
 

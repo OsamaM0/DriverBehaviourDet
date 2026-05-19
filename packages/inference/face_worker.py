@@ -21,6 +21,13 @@ import math
 import cv2
 import mediapipe as mp
 import numpy as np
+from mediapipe.tasks.python import vision as _mp_vision
+from mediapipe.tasks.python.core import base_options as _mp_base
+
+_FACE_MODEL = str(
+    __import__("pathlib").Path(__file__).parent.parent.parent
+    / "models" / "face_landmarker.task"
+)
 
 from packages.common.config import settings
 from packages.common.frame_cache import get_frame
@@ -28,7 +35,7 @@ from packages.common.kafka import bus
 from packages.common.obs import bootstrap
 from packages.common.schemas import FaceLandmarks, FrameRef, HeadPose, InferenceEnvelope
 
-log = bootstrap("face")
+log = bootstrap("face", metrics_port=9103)
 
 # Mediapipe Face Mesh eye landmark indices (468-mesh). EAR uses 6 points/eye.
 LEFT_EYE = (33, 160, 158, 133, 153, 144)
@@ -81,19 +88,24 @@ def _head_pose(pts: np.ndarray, w: int, h: int) -> HeadPose:
 
 class _FaceEngine:
     def __init__(self) -> None:
-        self._mp = mp.solutions.face_mesh.FaceMesh(
-            max_num_faces=1, refine_landmarks=False,
-            min_detection_confidence=0.5, min_tracking_confidence=0.5,
+        opts = _mp_vision.FaceLandmarkerOptions(
+            base_options=_mp_base.BaseOptions(model_asset_path=_FACE_MODEL),
+            num_faces=1,
+            min_face_detection_confidence=0.5,
+            min_face_presence_confidence=0.5,
+            min_tracking_confidence=0.5,
         )
+        self._mp = _mp_vision.FaceLandmarker.create_from_options(opts)
 
     def process(self, bgr: np.ndarray) -> FaceLandmarks | None:
-        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-        res = self._mp.process(rgb)
-        if not res.multi_face_landmarks:
-            return None
-        lms = res.multi_face_landmarks[0].landmark
         h, w = bgr.shape[:2]
-        pts = np.array([(p.x * w, p.y * h) for p in lms], dtype=np.float64)
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        res = self._mp.detect(mp_img)
+        if not res.face_landmarks:
+            return None
+        lms = res.face_landmarks[0]
+        pts = np.array([(lm.x * w, lm.y * h) for lm in lms], dtype=np.float64)
         return FaceLandmarks(
             tenant_id="", stream_id="", frame_id=0, ts_capture_ns=0,  # filled in by caller
             landmarks_count=len(lms),

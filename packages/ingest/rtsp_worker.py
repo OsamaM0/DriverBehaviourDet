@@ -38,7 +38,7 @@ from packages.common.schemas import FrameRef
 from packages.ingest.ring_buffer import FrameSlot, RingBuffer
 from packages.ingest.stream_lease import claim, hold_lease, worker_id
 
-log = bootstrap("ingest")
+log = bootstrap("ingest", metrics_port=9101)
 
 JPEG_QUALITY = 80
 MOTION_DOWNSCALE = 8                    # for cheap motion gate
@@ -183,7 +183,21 @@ async def main() -> None:
     stream_id = os.environ.get("STREAM_ID", "dev-stream")
     tenant_id = os.environ.get("TENANT_ID", "dev-tenant")
     url = os.environ.get("STREAM_URL", "rtsp://localhost:8554/test")
-    await ingest_one(stream_id, tenant_id, url)
+    max_attempts = 30
+    retry_delay = 5
+    for attempt in range(1, max_attempts + 1):
+        try:
+            await ingest_one(stream_id, tenant_id, url)
+            break  # completed normally
+        except (OSError, Exception) as exc:  # noqa: BLE001
+            if "Connection refused" not in str(exc) and "Connection timed out" not in str(exc):
+                raise
+            if attempt >= max_attempts:
+                log.error("rtsp_connect_failed", url=url, attempts=attempt)
+                raise
+            log.warning("rtsp_connect_retry", url=url, attempt=attempt,
+                        retry_in=retry_delay, error=str(exc))
+            await asyncio.sleep(retry_delay)
 
 
 if __name__ == "__main__":

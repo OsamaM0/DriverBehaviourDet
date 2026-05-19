@@ -23,7 +23,7 @@ from packages.inference.postprocess import postprocess_single
 from packages.inference.preprocess import preprocess_jpeg
 from packages.inference.triton_client import get_triton
 
-log = bootstrap("detector")
+log = bootstrap("detector", metrics_port=9102)
 
 CONCURRENCY = 32
 GROUP_ID = "detector"

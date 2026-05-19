@@ -18,7 +18,9 @@ class Settings(BaseSettings):
 
     # Identity
     service_name: str = "driver-analytics"
-    env: Literal["dev", "staging", "prod"] = "dev"
+    # Use APP_ENV to avoid clashing with the system ENV variable set by
+    # the DeepStream container (ENV=/etc/shinit_v2).
+    env: Literal["dev", "staging", "prod"] = Field(default="dev", validation_alias="APP_ENV")
     log_level: str = "INFO"
     log_json: bool = True
 

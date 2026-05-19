@@ -17,7 +17,6 @@ def get_redis() -> aioredis.Redis:
     if _pool is None:
         _pool = aioredis.from_url(
             settings.redis_url,
-            encoding=None,           # we do binary I/O for frame bytes
             decode_responses=False,
             max_connections=64,
         )

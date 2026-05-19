@@ -28,6 +28,8 @@ dependencies = [
   "mediapipe>=0.10.11",
   # infra clients
   "aiokafka>=0.10",
+  "lz4>=4.0",
+  "cramjam>=2.8",
   "redis[hiredis]>=5.0",
   "boto3>=1.34",
   "asyncpg>=0.29",
