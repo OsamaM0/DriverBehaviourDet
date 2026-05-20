@@ -27,6 +27,7 @@ from packages.common.schemas import (
     AlertType,
     BehaviorScores,
     BehaviorStateName,
+    Box,
 )
 
 
@@ -36,7 +37,7 @@ class Thresholds:
     phone_enter: float = 0.4
     phone_exit: float = 0.2
     seatbelt_unsafe: float = 0.4         # if seatbelt-present prob below this → unsafe
-    smoking_enter: float = 0.4
+    smoking_enter: float = 0.2
     smoking_exit: float = 0.2
     eating_enter: float = 0.5
     eating_exit: float = 0.25
@@ -58,6 +59,10 @@ class StateRecord:
     prev: BehaviorStateName = BehaviorStateName.NORMAL
     entered_ns: int = field(default_factory=time.time_ns)
     last_alerts: dict[AlertType, int] = field(default_factory=dict)   # type → ns last emitted
+    latest_detection_boxes: list[Box] = field(default_factory=list)
+    latest_detection_frame_width: int | None = None
+    latest_detection_frame_height: int | None = None
+    latest_detection_ts_ns: int = 0
 
 
 @dataclass(slots=True)

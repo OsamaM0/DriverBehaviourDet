@@ -55,6 +55,8 @@ async def _handle(msg: FrameRef, sem: asyncio.Semaphore) -> None:
                 frame_id=msg.frame_id,
                 ts_capture_ns=msg.ts_capture_ns,
                 model_version=settings.triton_model_detector_version or "latest",
+                frame_width=ow,
+                frame_height=oh,
                 boxes=boxes,
                 latency_ms=latency_ms,
             )

@@ -60,6 +60,8 @@ class Box(BaseModel):
 class DetectionResult(_Base):
     source: Literal["rfdetr"] = "rfdetr"
     model_version: str
+    frame_width: int | None = None
+    frame_height: int | None = None
     boxes: list[Box]
     latency_ms: float
 
@@ -152,8 +154,11 @@ class Alert(_Base):
     severity: AlertSeverity
     state: BehaviorStateName
     dedupe_key: str                      # `${stream_id}:${type}:${minute_bucket}`
-    evidence_window_s: int = 10          # ±N seconds (configurable per tenant)
+    evidence_window_s: int = 2          # ±N seconds (configurable per tenant)
     scores: BehaviorScores
+    boxes: list[Box] = Field(default_factory=list)
+    frame_width: int | None = None
+    frame_height: int | None = None
     note: str | None = None
 
 

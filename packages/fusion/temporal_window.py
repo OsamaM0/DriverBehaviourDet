@@ -43,8 +43,11 @@ class StreamWindow:
     def fraction_above(self, signal: str, threshold: float) -> float:
         if not self.samples:
             return 0.0
-        n = sum(1 for s in self.samples if s.values.get(signal, 0.0) >= threshold)
-        return n / len(self.samples)
+        observed = [s.values[signal] for s in self.samples if signal in s.values]
+        if not observed:
+            return 0.0
+        n = sum(1 for value in observed if value >= threshold)
+        return n / len(observed)
 
     def mean(self, signal: str) -> float:
         if not self.samples:

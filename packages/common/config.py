@@ -41,7 +41,7 @@ class Settings(BaseSettings):
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
-    frame_cache_ttl_sec: int = 2
+    frame_cache_ttl_sec: int = 180
 
     # Postgres
     database_url: str = (

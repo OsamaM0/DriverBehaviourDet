@@ -1,0 +1,3085 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Driver Behaviour Analytics — Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <style>
+    /* ── Reset & Variables ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:       #0d1117;
+      --bg2:      #161b22;
+      --bg3:      #21262d;
+      --border:   #30363d;
+      --text:     #e6edf3;
+      --text2:    #8b949e;
+      --accent:   #58a6ff;
+      --accent2:  #1f6feb;
+      --green:    #3fb950;
+      --yellow:   #d29922;
+      --red:      #f85149;
+      --purple:   #bc8cff;
+      --orange:   #ffa657;
+      --cyan:     #39d353;
+      --radius:   8px;
+      --transition: 0.2s ease;
+    }
+    html, body { height: 100%; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    body { background: var(--bg); color: var(--text); display: flex; flex-direction: column; min-height: 100vh; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    button { cursor: pointer; }
+    input, select, textarea {
+      background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+      border-radius: var(--radius); padding: 6px 10px; font-size: 13px;
+    }
+    input:focus, select:focus { outline: 2px solid var(--accent2); border-color: var(--accent2); }
+
+    /* ── Top Bar ──────────────────────────────────────────────────────── */
+    .topbar {
+      background: var(--bg2); border-bottom: 1px solid var(--border);
+      padding: 0 20px; display: flex; align-items: center; gap: 16px;
+      height: 52px; position: sticky; top: 0; z-index: 100; flex-shrink: 0;
+    }
+    .topbar-logo { font-size: 17px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+    .topbar-logo span { color: var(--text2); font-weight: 400; font-size: 13px; }
+    .topbar-spacer { flex: 1; }
+    .topbar-time { font-size: 12px; color: var(--text2); font-variant-numeric: tabular-nums; }
+    .topbar-cors-warn {
+      background: #3d2b00; border: 1px solid var(--yellow); color: var(--yellow);
+      font-size: 11px; padding: 3px 10px; border-radius: var(--radius); cursor: pointer;
+    }
+    .topbar-cors-warn:hover { background: #5a3f00; }
+
+    /* ── Nav Tabs ─────────────────────────────────────────────────────── */
+    .navtabs {
+      background: var(--bg2); border-bottom: 1px solid var(--border);
+      padding: 0 20px; display: flex; gap: 2px; overflow-x: auto; flex-shrink: 0;
+      scrollbar-width: none;
+    }
+    .navtabs::-webkit-scrollbar { display: none; }
+    .navtab {
+      padding: 10px 16px; font-size: 13px; font-weight: 500; color: var(--text2);
+      border: none; background: transparent; border-bottom: 2px solid transparent;
+      transition: var(--transition); white-space: nowrap;
+    }
+    .navtab:hover { color: var(--text); }
+    .navtab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .navtab .dot {
+      display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+      margin-right: 6px; background: var(--text2); vertical-align: middle;
+    }
+    .navtab .dot.green { background: var(--green); }
+    .navtab .dot.red { background: var(--red); }
+    .navtab .dot.yellow { background: var(--yellow); }
+
+    /* ── Main Content ─────────────────────────────────────────────────── */
+    .main { flex: 1; padding: 20px; overflow-y: auto; }
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* ── Cards & Grids ────────────────────────────────────────────────── */
+    .card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px;
+    }
+    .card-title {
+      font-size: 13px; font-weight: 600; color: var(--text2);
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;
+    }
+    .grid-auto { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+    @media (max-width: 900px) { .grid-3 { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 600px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+    /* ── Status Badge ─────────────────────────────────────────────────── */
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 20px;
+      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .badge.ok     { background: #1a3827; color: var(--green); }
+    .badge.warn   { background: #3d2b00; color: var(--yellow); }
+    .badge.err    { background: #3d1010; color: var(--red); }
+    .badge.info   { background: #142137; color: var(--accent); }
+    .badge.purple { background: #231435; color: var(--purple); }
+    .badge.gray   { background: var(--bg3); color: var(--text2); }
+
+    /* ── Service Health Card ──────────────────────────────────────────── */
+    .svc-card {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 14px; display: flex; flex-direction: column; gap: 6px;
+      position: relative; overflow: hidden;
+    }
+    .svc-card::before {
+      content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+      width: 3px; background: var(--text2);
+    }
+    .svc-card.ok::before   { background: var(--green); }
+    .svc-card.warn::before { background: var(--yellow); }
+    .svc-card.err::before  { background: var(--red); }
+    .svc-card.checking::before { background: var(--text2); animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .svc-name  { font-weight: 600; font-size: 14px; }
+    .svc-port  { font-size: 11px; color: var(--text2); }
+    .svc-status { font-size: 12px; }
+    .svc-latency { font-size: 11px; color: var(--text2); }
+    .svc-action { margin-top: 4px; }
+    .svc-action a {
+      font-size: 11px; color: var(--accent); display: inline-flex; align-items: center; gap: 4px;
+    }
+
+    /* ── Tables ───────────────────────────────────────────────────────── */
+    .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .tbl th { background: var(--bg3); color: var(--text2); font-weight: 500; text-align: left; padding: 8px 12px; }
+    .tbl td { padding: 8px 12px; border-top: 1px solid var(--border); vertical-align: middle; }
+    .tbl tr:hover td { background: var(--bg3); }
+    .tbl-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+
+    /* ── Alert Feed Item ──────────────────────────────────────────────── */
+    .alert-item {
+      display: flex; gap: 12px; padding: 10px 14px;
+      border-bottom: 1px solid var(--border); align-items: flex-start;
+      animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+    .alert-item:last-child { border-bottom: none; }
+    .alert-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+    .alert-dot.critical { background: var(--red); box-shadow: 0 0 6px var(--red); }
+    .alert-dot.high     { background: var(--orange); }
+    .alert-dot.medium   { background: var(--yellow); }
+    .alert-dot.low      { background: var(--cyan); }
+    .alert-body { flex: 1; min-width: 0; }
+    .alert-type { font-weight: 600; font-size: 13px; }
+    .alert-meta { font-size: 11px; color: var(--text2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .alert-time { font-size: 11px; color: var(--text2); flex-shrink: 0; white-space: nowrap; }
+
+    /* ── Metric Score Bar ─────────────────────────────────────────────── */
+    .score-bar-wrap { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .score-label { font-size: 12px; width: 120px; flex-shrink: 0; color: var(--text2); }
+    .score-bar { flex: 1; height: 8px; background: var(--bg3); border-radius: 4px; overflow: hidden; }
+    .score-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease, background 0.4s ease; }
+    .score-val { font-size: 11px; width: 36px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+
+    /* ── Video Player ─────────────────────────────────────────────────── */
+    .stream-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .stream-header { padding: 10px 14px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); }
+    .stream-title { font-weight: 600; font-size: 14px; flex: 1; }
+    .stream-body { position: relative; background: #000; aspect-ratio: 16/9; }
+    .stream-video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .stream-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+    .stream-overlay {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.6); flex-direction: column; gap: 8px;
+    }
+    .stream-overlay-text { font-size: 13px; color: var(--text2); }
+    .stream-footer { padding: 10px 14px; display: flex; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--border); }
+    .stream-stat { font-size: 12px; color: var(--text2); }
+    .stream-stat strong { color: var(--text); }
+
+    /* ── Forms ────────────────────────────────────────────────────────── */
+    .form-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+    .form-label { font-size: 12px; color: var(--text2); }
+    .form-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .form-row .form-group { flex: 1; min-width: 140px; }
+    .btn {
+      padding: 7px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 500;
+      border: 1px solid var(--border); background: var(--bg3); color: var(--text);
+      transition: var(--transition);
+    }
+    .btn:hover { background: var(--border); }
+    .btn.primary { background: var(--accent2); border-color: var(--accent2); color: #fff; }
+    .btn.primary:hover { background: var(--accent); border-color: var(--accent); }
+    .btn.danger { background: #3d1010; border-color: var(--red); color: var(--red); }
+    .btn.danger:hover { background: #5a1818; }
+    .btn.sm { padding: 4px 10px; font-size: 12px; }
+
+    /* ── Misc ─────────────────────────────────────────────────────────── */
+    .section-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+    .section-subtitle { font-size: 13px; color: var(--text2); margin-bottom: 20px; }
+    .gap { margin-bottom: 16px; }
+    .gap-sm { margin-bottom: 8px; }
+    .row { display: flex; gap: 14px; flex-wrap: wrap; }
+    .row > * { flex: 1; min-width: 0; }
+    .empty { text-align: center; padding: 40px; color: var(--text2); font-size: 13px; }
+    .mono { font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 12px; }
+    .pill { display: inline-flex; gap: 4px; align-items: center; padding: 2px 8px; border-radius: 20px; background: var(--bg3); border: 1px solid var(--border); font-size: 11px; }
+    .tag-phone    { --c: #58a6ff; }
+    .tag-seatbelt { --c: #3fb950; }
+    .tag-smoking  { --c: #ffa657; }
+    .tag-eating   { --c: #d2a679; }
+    .tag-drowsy   { --c: #bc8cff; }
+    .tag-distract { --c: #f78166; }
+    .tag-hands    { --c: #79c0ff; }
+    .severity-tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    .sev-critical { background: #3d1010; color: var(--red); }
+    .sev-high     { background: #3d2010; color: var(--orange); }
+    .sev-medium   { background: #3d2b00; color: var(--yellow); }
+    .sev-low      { background: #1a3827; color: var(--green); }
+
+    /* ── CORS Modal ───────────────────────────────────────────────────── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+      z-index: 1000; align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 560px; width: 90%; }
+    .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+    .modal-body { font-size: 13px; color: var(--text2); line-height: 1.6; }
+    .modal-body code { background: var(--bg3); padding: 2px 6px; border-radius: 4px; color: var(--text); font-size: 11px; }
+    .modal-body pre { background: var(--bg3); padding: 10px; border-radius: var(--radius); margin: 8px 0; overflow-x: auto; }
+    .modal-close { margin-top: 16px; }
+
+    /* ── Metrics ──────────────────────────────────────────────────────── */
+    .metric-kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; align-items: start; }
+    .metric-k { font-size: 12px; color: var(--text2); white-space: nowrap; }
+    .metric-v { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+    /* ── Live indicator ───────────────────────────────────────────────── */
+    .live-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--red);
+      animation: livepulse 1.5s infinite; flex-shrink: 0;
+    }
+    @keyframes livepulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(1.3)} }
+    .live-label { font-size: 11px; font-weight: 600; color: var(--red); display: flex; align-items: center; gap: 5px; }
+
+    /* ── Scroll area ──────────────────────────────────────────────────── */
+    .scroll-area { max-height: 400px; overflow-y: auto; }
+    .scroll-area::-webkit-scrollbar { width: 4px; }
+    .scroll-area::-webkit-scrollbar-track { background: var(--bg2); }
+    .scroll-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .chart-wrap { position: relative; height: 220px; }
+    .chart-wrap-sm { position: relative; height: 140px; }
+
+    /* Redpanda topics */
+    .topic-pill {
+      display: inline-flex; align-items: center; gap: 6px; background: var(--bg3);
+      border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px;
+      font-size: 12px; margin: 3px;
+    }
+    .topic-count { color: var(--accent); font-weight: 600; }
+
+    /* textarea logs */
+    .log-area {
+      width: 100%; height: 180px; background: #000; color: #0f0; font-family: monospace;
+      font-size: 11px; border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 8px; resize: vertical; overflow-y: auto;
+    }
+
+    /* ── Real-Time Detection HUD overlay ─────────────────────────────── */
+    .rtd-hud {
+      position: absolute; bottom: 28px; left: 0; right: 0;
+      background: rgba(0,0,0,0.84); backdrop-filter: blur(6px);
+      display: none; flex-wrap: wrap; gap: 5px; padding: 8px 10px;
+      z-index: 20; border-top: 1px solid rgba(255,255,255,0.07);
+    }
+    .rtd-hud.rtd-on { display: flex; }
+    .rtd-chip {
+      flex: 1; min-width: 80px;
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      padding: 7px 5px; border-radius: 8px;
+      border: 1.5px solid #3fb950; background: rgba(63,185,80,0.1);
+      color: #3fb950; font-size: 10px; font-weight: 600;
+      transition: border-color .3s, background .3s, color .3s;
+    }
+    .rtd-chip .rtd-icon  { font-size: 16px; line-height: 1; }
+    .rtd-chip .rtd-score { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+    .rtd-chip .rtd-lbl   { opacity: .8; }
+    .rtd-chip.rtd-warn   { border-color:#d29922; background:rgba(210,153,34,0.12); color:#d29922; }
+    .rtd-chip.rtd-alert  { border-color:#f85149; background:rgba(248,81,73,0.16);  color:#f85149;
+      animation: rtd-flash .55s ease-in-out infinite alternate; }
+    .rtd-chip.rtd-idle   { border-color:var(--border); background:transparent; color:var(--text2); }
+    @keyframes rtd-flash { from{opacity:1;transform:scale(1)} to{opacity:.6;transform:scale(.97)} }
+  </style>
+</head>
+<body>
+
+<!-- ── Top Bar ─────────────────────────────────────────────────────────── -->
+<div class="topbar">
+  <div class="topbar-logo">
+    &#x1F6E1; Driver Analytics
+    <span>/ Dashboard v1.0</span>
+  </div>
+  <div class="topbar-spacer"></div>
+  <button class="topbar-cors-warn" id="corsWarnBtn" style="display:none" onclick="openCorsModal()">
+    &#9888; CORS Issues Detected — Click for fix
+  </button>
+  <div class="topbar-time" id="clock">--:--:--</div>
+</div>
+
+<!-- ── Nav Tabs ────────────────────────────────────────────────────────── -->
+<nav class="navtabs">
+  <button class="navtab active" onclick="switchTab('overview')" id="tab-overview">
+    <span class="dot" id="dot-overview"></span>Overview
+  </button>
+  <button class="navtab" onclick="switchTab('streams')" id="tab-streams">
+    <span class="dot" id="dot-streams"></span>Streams &amp; Live Video
+  </button>
+  <button class="navtab" onclick="switchTab('alerts')" id="tab-alerts">
+    <span class="dot" id="dot-alerts"></span>Live Alerts
+    <span id="alertBadge" style="display:none;background:var(--red);color:#fff;font-size:10px;border-radius:10px;padding:0 5px;margin-left:4px;font-weight:700"></span>
+  </button>
+  <button class="navtab" onclick="switchTab('tenants')" id="tab-tenants">
+    <span class="dot" id="dot-tenants"></span>Tenants
+  </button>
+  <button class="navtab" onclick="switchTab('models')" id="tab-models">
+    <span class="dot" id="dot-models"></span>Models &amp; Triton
+  </button>
+  <button class="navtab" onclick="switchTab('storage')" id="tab-storage">
+    <span class="dot" id="dot-storage"></span>Storage
+  </button>
+  <button class="navtab" onclick="switchTab('messaging')" id="tab-messaging">
+    <span class="dot" id="dot-messaging"></span>Messaging
+  </button>
+  <button class="navtab" onclick="switchTab('metrics')" id="tab-metrics">
+    <span class="dot" id="dot-metrics"></span>Metrics
+  </button>
+  <button class="navtab" onclick="switchTab('links')" id="tab-links">
+    <span class="dot" id="dot-links"></span>Quick Links
+  </button>
+</nav>
+
+<!-- ── Main ────────────────────────────────────────────────────────────── -->
+<div class="main">
+
+  <!-- ══ OVERVIEW ══════════════════════════════════════════════════════ -->
+  <div class="section active" id="sec-overview">
+    <div class="section-title">&#127760; System Overview</div>
+    <div class="section-subtitle">Real-time health of all services. Polled every 10 seconds.</div>
+
+    <div class="grid-auto gap" id="svcGrid">
+      <!-- cards injected by JS -->
+    </div>
+
+    <div class="row gap">
+      <div class="card" style="flex:2">
+        <div class="card-title">Recent Alerts Summary</div>
+        <div id="overviewAlertList" class="scroll-area" style="max-height:240px">
+          <div class="empty">Select a tenant to view alerts</div>
+        </div>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-title">Behaviour State Distribution</div>
+        <div class="chart-wrap-sm"><canvas id="stateChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="row gap">
+      <div class="card">
+        <div class="card-title">Quick Stats</div>
+        <div class="metric-kv" id="quickStats">
+          <span class="metric-k">Active Streams</span><span class="metric-v" id="qs-streams">—</span>
+          <span class="metric-k">Tenants</span><span class="metric-v" id="qs-tenants">—</span>
+          <span class="metric-k">Models Loaded</span><span class="metric-v" id="qs-models">—</span>
+          <span class="metric-k">Recent Alerts (100)</span><span class="metric-v" id="qs-alerts">—</span>
+          <span class="metric-k">Evidence Bucket</span><span class="metric-v" id="qs-bucket">—</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Active Tenant</div>
+        <div class="form-group">
+          <label class="form-label">Tenant ID (used globally across tabs)</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="globalTenantId" placeholder="e.g. tenant-001" style="flex:1" />
+            <button class="btn primary sm" onclick="setGlobalTenant()">Apply</button>
+          </div>
+        </div>
+        <div id="tenantStatus" style="font-size:12px;color:var(--text2)">No tenant selected</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ STREAMS ═══════════════════════════════════════════════════════ -->
+  <div class="section" id="sec-streams">
+    <div class="section-title">&#127909; Streams &amp; Live Video</div>
+    <div class="section-subtitle">HLS via MediaMTX (port 8888), local file, or direct URL. Detection boxes overlay from live alert events.</div>
+
+    <div class="row gap">
+      <div class="card" style="flex:2">
+        <div class="card-title">Live Stream Viewer</div>
+        <!-- Source selector -->
+        <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn sm src-btn active" id="srcBtnHls"  onclick="setStreamSource('hls')">&#127760; HLS / RTSP</button>
+          <button class="btn sm src-btn"        id="srcBtnFile" onclick="setStreamSource('file')">&#128190; Local File</button>
+          <button class="btn sm src-btn"        id="srcBtnUrl"  onclick="setStreamSource('url')">&#128279; Direct URL</button>
+          <button class="btn sm src-btn"        id="srcBtnDemo" onclick="setStreamSource('demo')" style="border-color:#3fb950;color:#3fb950">&#129514; Demo Mode</button>
+          <button class="btn sm" id="rtdToggleBtn" onclick="toggleRTD()" title="Toggle real-time detection status overlay" style="margin-left:auto">&#128202; Live Det. OFF</button>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);cursor:pointer">
+            <input type="checkbox" id="loopChk" checked style="width:14px;height:14px;background:var(--bg3);border:1px solid var(--border);border-radius:3px;accent-color:var(--accent)" /> Loop
+          </label>
+        </div>
+        <!-- HLS row -->
+        <div id="srcHlsRow" class="form-row gap-sm">
+          <div class="form-group" style="flex:1">
+            <label class="form-label">HLS URL (MediaMTX port 8888)</label>
+            <input type="text" id="hlsUrl" value="http://localhost:8888/driver_synth/index.m3u8" style="width:100%" />
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:6px">
+            <button class="btn primary sm" onclick="loadStream()">&#9654; Play</button>
+            <button class="btn sm" onclick="stopStream()">&#9632; Stop</button>
+          </div>
+        </div>
+        <!-- File row -->
+        <div id="srcFileRow" class="form-row gap-sm" style="display:none">
+          <div class="form-group" style="flex:1">
+            <label class="form-label">1. Pick a local video file &nbsp;<span style="color:var(--text2);font-weight:400">(.mp4 .webm .mkv .mov .avi) Uploads to the pipeline when a Tenant ID is set.</span></label>
+            <input type="file" id="fileInput" accept="video/*" style="width:100%" />
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:6px">
+            <button class="btn primary sm" onclick="loadLocalFile()">&#9654; 2. Load, Play &amp; Analyze</button>
+            <button class="btn sm" onclick="replayVideo()">&#8635; Replay</button>
+            <button class="btn sm" onclick="stopStream()">&#9632; Stop</button>
+          </div>
+        </div>
+        <div id="fileUploadMsg" style="font-size:12px;margin-top:6px"></div>
+        <!-- Direct URL row -->
+        <div id="srcUrlRow" class="form-row gap-sm" style="display:none">
+          <div class="form-group" style="flex:1">
+            <label class="form-label">Direct video URL (.mp4 / .webm)</label>
+            <input type="text" id="directUrl" placeholder="http://..." style="width:100%" />
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:6px">
+            <button class="btn primary sm" onclick="loadDirectUrl()">&#9654; Play</button>
+            <button class="btn sm" onclick="stopStream()">&#9632; Stop</button>
+          </div>
+        </div>
+        <!-- Demo row -->
+        <div id="srcDemoRow" class="form-row gap-sm" style="display:none">
+          <div class="form-group" style="flex:1">
+            <label class="form-label" style="color:#3fb950">&#129514; Synthetic driver scene — no video file needed. Cycles through all alert types automatically.</label>
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:6px">
+            <button class="btn sm" id="demoBtnStart" onclick="startDemo()" style="background:#1a3a1a;border-color:#3fb950;color:#3fb950">&#9654; Start Demo</button>
+            <button class="btn sm" onclick="stopStream()">&#9632; Stop</button>
+          </div>
+        </div>
+        <div class="stream-card">
+          <div class="stream-body" style="background:#000">
+            <video id="streamVideo" class="stream-video" autoplay muted playsinline controls></video>
+            <canvas id="streamCanvas" class="stream-canvas"></canvas>
+            <div class="stream-overlay" id="streamOverlay">
+              <div style="font-size:32px">&#127909;</div>
+              <div class="stream-overlay-text" id="streamOverlayText">Choose a source above and press Play</div>
+              <div style="font-size:11px;color:var(--text2)" id="streamOverlaySub">HLS: http://localhost:8888/{path}/index.m3u8</div>
+              <button class="btn sm primary" id="streamRetryBtn" style="display:none;margin-top:8px" onclick="retryStream()">&#8635; Retry</button>
+            </div>
+            <!-- Real-time detection status HUD -->
+            <div class="rtd-hud" id="rtdHud">
+              <div class="rtd-chip rtd-idle" id="rtdc-phone"><span class="rtd-icon">&#128241;</span><span class="rtd-score" id="rtdv-phone">&mdash;</span><span class="rtd-lbl">Phone</span></div>
+              <div class="rtd-chip rtd-idle" id="rtdc-seatbelt"><span class="rtd-icon">&#128683;</span><span class="rtd-score" id="rtdv-seatbelt">&mdash;</span><span class="rtd-lbl">Seatbelt</span></div>
+              <div class="rtd-chip rtd-idle" id="rtdc-smoking"><span class="rtd-icon">&#128420;</span><span class="rtd-score" id="rtdv-smoking">&mdash;</span><span class="rtd-lbl">Smoking</span></div>
+              <div class="rtd-chip rtd-idle" id="rtdc-eating"><span class="rtd-icon">&#127829;</span><span class="rtd-score" id="rtdv-eating">&mdash;</span><span class="rtd-lbl">Eating</span></div>
+              <div class="rtd-chip rtd-idle" id="rtdc-drowsy"><span class="rtd-icon">&#128564;</span><span class="rtd-score" id="rtdv-drowsy">&mdash;</span><span class="rtd-lbl">Drowsy</span></div>
+              <div class="rtd-chip rtd-idle" id="rtdc-distract"><span class="rtd-icon">&#128064;</span><span class="rtd-score" id="rtdv-distract">&mdash;</span><span class="rtd-lbl">Distracted</span></div>
+              <div class="rtd-chip rtd-idle" id="rtdc-hands"><span class="rtd-icon">&#9995;</span><span class="rtd-score" id="rtdv-hands">&mdash;</span><span class="rtd-lbl">Hands Off</span></div>
+            </div>
+          </div>
+          <div class="stream-footer">
+            <span class="stream-stat"><strong id="streamStatusTxt">Idle</strong></span>
+            <span class="stream-stat">Resolution: <strong id="streamRes">—</strong></span>
+            <span class="stream-stat">FPS: <strong id="streamFps">—</strong></span>
+            <span class="stream-stat" id="streamHlsInfo" style="display:none"></span>
+            <span class="stream-stat" style="color:var(--accent)" id="streamLoopBadge" style="display:none">&#8635; Looping</span>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-title">Per-Stream Detection</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-size:12px;color:var(--text2)">Scores from latest WS alert</div>
+          <div id="scoresLastUpdate" style="font-size:10px;color:var(--text2)">No data yet</div>
+        </div>
+        <div id="scoresNoData" class="scores-nodata">
+          &#128307; No detection data<br>
+          <span style="font-size:11px">Scores update when WebSocket alerts arrive.<br>Set a Tenant ID in Overview first.</span>
+        </div>
+        <div id="streamScores" style="display:none">
+          <div class="score-bar-wrap"><span class="score-label">&#128241; Phone Use</span>     <div class="score-bar"><div class="score-fill" id="sf-phone"    style="width:0%;background:#58a6ff"></div></div><span class="score-val" id="sv-phone">0%</span></div>
+          <div class="score-bar-wrap"><span class="score-label">&#9889; No Seatbelt</span>    <div class="score-bar"><div class="score-fill" id="sf-seatbelt" style="width:0%;background:#3fb950"></div></div><span class="score-val" id="sv-seatbelt">0%</span></div>
+          <div class="score-bar-wrap"><span class="score-label">&#128684; Smoking</span>       <div class="score-bar"><div class="score-fill" id="sf-smoking"  style="width:0%;background:#ffa657"></div></div><span class="score-val" id="sv-smoking">0%</span></div>
+          <div class="score-bar-wrap"><span class="score-label">&#127829; Eating</span>        <div class="score-bar"><div class="score-fill" id="sf-eating"   style="width:0%;background:#d2a679"></div></div><span class="score-val" id="sv-eating">0%</span></div>
+          <div class="score-bar-wrap"><span class="score-label">&#128564; Drowsy</span>        <div class="score-bar"><div class="score-fill" id="sf-drowsy"   style="width:0%;background:#bc8cff"></div></div><span class="score-val" id="sv-drowsy">0%</span></div>
+          <div class="score-bar-wrap"><span class="score-label">&#128064; Distracted</span>   <div class="score-bar"><div class="score-fill" id="sf-distract" style="width:0%;background:#f78166"></div></div><span class="score-val" id="sv-distract">0%</span></div>
+          <div class="score-bar-wrap"><span class="score-label">&#9995; Hands Off Wheel</span><div class="score-bar"><div class="score-fill" id="sf-hands"    style="width:0%;background:#79c0ff"></div></div><span class="score-val" id="sv-hands">0%</span></div>
+        </div>
+        <div class="chart-wrap-sm" style="margin-top:12px"><canvas id="streamBehaviorChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card gap">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        Registered Streams
+        <button class="btn sm primary" onclick="loadStreams()">&#8635; Refresh</button>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead>
+            <tr><th>Stream ID</th><th>Tenant</th><th>URL</th><th>Protocol</th><th>Driver</th><th>Enabled</th><th>Action</th></tr>
+          </thead>
+          <tbody id="streamsTbody">
+            <tr><td colspan="7" class="empty">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Add Stream</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Stream ID</label><input id="ns-id" placeholder="cam-001" /></div>
+        <div class="form-group"><label class="form-label">Tenant ID</label><input id="ns-tenant" placeholder="tenant-001" /></div>
+        <div class="form-group" style="flex:2"><label class="form-label">URL</label><input id="ns-url" placeholder="rtsp://user:pass@192.168.1.100:554/stream1" /></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Protocol</label>
+          <select id="ns-proto"><option value="rtsp">RTSP</option><option value="mjpeg">MJPEG</option></select>
+        </div>
+        <div class="form-group"><label class="form-label">Driver ID (optional)</label><input id="ns-driver" placeholder="driver-123" /></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn primary" onclick="createStream()">+ Add Stream</button></div>
+      </div>
+      <div id="streamMsg" style="font-size:12px;margin-top:6px"></div>
+    </div>
+  </div>
+
+  <!-- ══ ALERTS ════════════════════════════════════════════════════════ -->
+  <div class="section" id="sec-alerts">
+    <div class="section-title">
+      &#128680; Live Alerts
+      <span class="live-label" id="wsStatusLabel"><span class="live-dot"></span>Connecting...</span>
+    </div>
+    <div class="row gap">
+      <div class="card" style="flex:3">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+          Alert Feed
+          <div style="display:flex;gap:8px;align-items:center">
+            <select id="alertTypeFilter" class="sm" onchange="filterAlerts()">
+              <option value="">All Types</option>
+              <option value="phone_use">Phone Use</option>
+              <option value="no_seatbelt">No Seatbelt</option>
+              <option value="smoking">Smoking</option>
+              <option value="eating">Eating</option>
+              <option value="drowsiness">Drowsiness</option>
+              <option value="distraction">Distraction</option>
+              <option value="hands_off_wheel">Hands Off Wheel</option>
+            </select>
+            <select id="alertSevFilter" class="sm" onchange="filterAlerts()">
+              <option value="">All Severities</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+            <button class="btn sm danger" onclick="clearAlerts()">Clear</button>
+          </div>
+        </div>
+        <div id="alertFeed" class="scroll-area" style="max-height:500px">
+          <div class="empty" id="alertFeedEmpty">Waiting for alerts… (WebSocket connects when tenant is set)</div>
+        </div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:14px">
+        <div class="card">
+          <div class="card-title">Alert Trend (last 20)</div>
+          <div class="chart-wrap"><canvas id="alertTrendChart"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Alert Breakdown</div>
+          <div class="chart-wrap"><canvas id="alertPieChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card gap">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        Historical Events (REST)
+        <button class="btn sm primary" onclick="loadEvents()">&#8635; Load / Refresh</button>
+      </div>
+      <div id="wsInfo" style="font-size:12px;color:var(--text2);margin-bottom:8px">
+        WebSocket: <code id="wsUrl">ws://localhost:8080/v1/ws/alerts?tenant_id=&lt;set tenant&gt;</code>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead>
+            <tr><th>Time</th><th>Type</th><th>Severity</th><th>State</th><th>Stream</th><th>Evidence</th></tr>
+          </thead>
+          <tbody id="eventsTbody">
+            <tr><td colspan="6" class="empty">Set a tenant ID and click Load</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TENANTS ═══════════════════════════════════════════════════════ -->
+  <div class="section" id="sec-tenants">
+    <div class="section-title">&#127970; Tenants</div>
+
+    <div class="row gap">
+      <div class="card" style="flex:2">
+        <div class="card-title" style="display:flex;justify-content:space-between">
+          Tenant List
+          <button class="btn sm primary" onclick="loadTenants()">&#8635; Refresh</button>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>ID</th><th>Name</th><th>Action</th></tr></thead>
+            <tbody id="tenantsTbody"><tr><td colspan="3" class="empty">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-title">Create Tenant</div>
+        <div class="form-group"><label class="form-label">Tenant ID</label><input id="nt-id" placeholder="tenant-001" /></div>
+        <div class="form-group"><label class="form-label">Name</label><input id="nt-name" placeholder="Acme Corp" /></div>
+        <button class="btn primary" onclick="createTenant()" style="width:100%">+ Create Tenant</button>
+        <div id="tenantMsg" style="font-size:12px;margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODELS & TRITON ═══════════════════════════════════════════════ -->
+  <div class="section" id="sec-models">
+    <div class="section-title">&#129302; Models &amp; Triton</div>
+    <div class="row gap">
+      <div class="card">
+        <div class="card-title">Triton Server Health</div>
+        <div class="metric-kv" id="tritonHealth">
+          <span class="metric-k">HTTP (8000)</span><span class="metric-v" id="th-live">Checking…</span>
+          <span class="metric-k">Ready</span><span class="metric-v" id="th-ready">Checking…</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Triton Server Metadata</div>
+        <div id="tritonMeta" style="font-size:13px;color:var(--text2)">Loading…</div>
+      </div>
+    </div>
+
+    <div class="row gap">
+      <div class="card" style="flex:2">
+        <div class="card-title" style="display:flex;justify-content:space-between">
+          Triton Models
+          <button class="btn sm primary" onclick="loadTritonModels()">&#8635; Refresh</button>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>Name</th><th>Version</th><th>State</th><th>Backend</th></tr></thead>
+            <tbody id="tritonModelsTbody"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-title">DB Model Registry</div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>Name</th><th>Version</th><th>Active</th><th>Backend</th></tr></thead>
+            <tbody id="dbModelsTbody"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Triton Inference — Quick Test</div>
+      <div class="section-subtitle">Send a raw JSON inference request to Triton HTTP API (port 8000)</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Model Name</label>
+          <input id="inf-model" value="rfdetr_driver_behaviour" style="width:100%"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Version (leave blank = latest)</label>
+          <input id="inf-ver" placeholder="1" style="width:100%"/>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Request JSON (POST /v2/models/{name}[/versions/{ver}]/infer)</label>
+        <textarea id="inf-body" style="width:100%;height:80px;font-family:monospace;font-size:12px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:8px;resize:vertical">{"inputs":[]}</textarea>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn primary" onclick="testInfer()">&#9654; Send Inference</button>
+        <button class="btn sm" onclick="document.getElementById('inf-result').textContent=''">Clear</button>
+      </div>
+      <pre id="inf-result" style="margin-top:10px;background:var(--bg3);padding:10px;border-radius:var(--radius);font-size:11px;max-height:200px;overflow:auto;white-space:pre-wrap"></pre>
+    </div>
+  </div>
+
+  <!-- ══ STORAGE ═══════════════════════════════════════════════════════ -->
+  <div class="section" id="sec-storage">
+    <div class="section-title">&#128193; Storage — MinIO S3</div>
+    <div class="row gap">
+      <div class="card">
+        <div class="card-title">MinIO Status</div>
+        <div class="metric-kv">
+          <span class="metric-k">S3 API (9000)</span><span class="metric-v" id="minio-health">Checking…</span>
+          <span class="metric-k">Console (9001)</span><span class="metric-v"><a href="http://localhost:9001" target="_blank">&#x1F517; Open Console</a></span>
+          <span class="metric-k">Credentials</span><span class="metric-v" style="color:var(--text2)">minio / minio12345</span>
+        </div>
+        <div style="margin-top:12px">
+          <button class="btn primary sm" onclick="checkMinIO()">&#8635; Re-check</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Evidence Bucket</div>
+        <div id="evidenceBucketInfo" class="metric-kv">
+          <span class="metric-k">Bucket</span><span class="metric-v" id="ev-bucket">Loading…</span>
+          <span class="metric-k">Console URL</span><span class="metric-v"><a href="http://localhost:9001/browser/driver-evidence" target="_blank">&#x1F517; Browse Files</a></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card gap">
+      <div class="card-title">Evidence Clips</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Evidence video clips from alerts. Click an alert to view its evidence clip.</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Alert ID</label>
+          <input id="ev-alertId" placeholder="alert UUID from events table" style="flex:1"/>
+        </div>
+        <div style="display:flex;align-items:flex-end">
+          <button class="btn primary" onclick="fetchEvidence()">&#9654; Load Evidence</button>
+        </div>
+      </div>
+      <div id="evidencePlayer" style="margin-top:12px;display:none">
+        <video id="evidenceVideo" controls style="width:100%;max-width:600px;border-radius:var(--radius);border:1px solid var(--border)"></video>
+      </div>
+      <div id="evidenceMsg" style="font-size:12px;margin-top:6px"></div>
+    </div>
+  </div>
+
+  <!-- ══ MESSAGING ══════════════════════════════════════════════════════ -->
+  <div class="section" id="sec-messaging">
+    <div class="section-title">&#128225; Messaging — Redpanda (Kafka API)</div>
+    <div class="row gap">
+      <div class="card">
+        <div class="card-title">Cluster Health</div>
+        <div id="rpCluster" class="metric-kv">
+          <span class="metric-k">Admin API (9644)</span><span class="metric-v" id="rp-status">Checking…</span>
+        </div>
+        <div id="rpClusterDetails" style="margin-top:8px;font-size:12px;color:var(--text2)"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Brokers</div>
+        <div id="rpBrokers" style="font-size:13px;color:var(--text2)">Loading…</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Quick Links</div>
+        <div style="display:flex;flex-direction:column;gap:8px;font-size:13px">
+          <a href="http://localhost:8085" target="_blank">&#x1F517; Redpanda Console (8085)</a>
+          <a href="http://localhost:9644/v1/cluster" target="_blank">&#x1F517; Admin API /v1/cluster</a>
+          <a href="http://localhost:9644/v1/topics" target="_blank">&#x1F517; Admin API /v1/topics</a>
+          <a href="http://localhost:18081/subjects" target="_blank">&#x1F517; Schema Registry (18081)</a>
+          <a href="http://localhost:18082/topics" target="_blank">&#x1F517; REST Proxy (18082)</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="card gap">
+      <div class="card-title" style="display:flex;justify-content:space-between">
+        Topics
+        <button class="btn sm primary" onclick="loadTopics()">&#8635; Refresh</button>
+      </div>
+      <div id="topicsList" style="padding:4px 0">
+        <div class="empty">Loading topics…</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Partition Details</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Topic Name</label>
+          <input id="partitionTopic" placeholder="e.g. driver.events.alert" style="flex:1"/>
+        </div>
+        <div style="display:flex;align-items:flex-end">
+          <button class="btn primary sm" onclick="loadPartitions()">Load Partitions</button>
+        </div>
+      </div>
+      <div id="partitionDetails" style="margin-top:8px;font-size:12px;color:var(--text2)"></div>
+    </div>
+  </div>
+
+  <!-- ══ METRICS ════════════════════════════════════════════════════════ -->
+  <div class="section" id="sec-metrics">
+    <div class="section-title">&#128200; Metrics</div>
+    <div class="row gap">
+      <div class="card" style="flex:2">
+        <div class="card-title">Triton Prometheus Metrics (Port 8002)</div>
+        <div id="tritonMetricsCards" class="grid-auto gap-sm" style="margin-bottom:12px"></div>
+        <div class="card-title" style="margin-top:8px">Raw Metrics</div>
+        <textarea class="log-area" id="tritonMetricsRaw" readonly placeholder="Click refresh to load…"></textarea>
+        <button class="btn sm primary" style="margin-top:8px" onclick="loadTritonMetrics()">&#8635; Refresh Metrics</button>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-title">Prometheus Query (Port 9090)</div>
+        <div class="form-group">
+          <label class="form-label">PromQL Query</label>
+          <input id="promQuery" value="up" style="width:100%"/>
+        </div>
+        <button class="btn primary sm" onclick="runPromQuery()">&#9654; Execute</button>
+        <pre id="promResult" style="margin-top:10px;background:var(--bg3);padding:10px;border-radius:var(--radius);font-size:11px;max-height:300px;overflow:auto;white-space:pre-wrap">Press Execute to run query…</pre>
+      </div>
+    </div>
+
+    <div class="row gap">
+      <div class="card">
+        <div class="card-title">Inference Latency (from Triton metrics)</div>
+        <div class="chart-wrap"><canvas id="latencyChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Request Count per Model</div>
+        <div class="chart-wrap"><canvas id="reqCountChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">API Health Endpoints</div>
+      <div class="form-row" style="margin-bottom:8px">
+        <div>
+          <button class="btn sm" onclick="fetchHealthz()">GET /healthz</button>
+          <button class="btn sm" onclick="fetchReadyz()" style="margin-left:6px">GET /readyz</button>
+          <button class="btn sm" onclick="fetchMinioHealth()" style="margin-left:6px">MinIO Health</button>
+        </div>
+      </div>
+      <pre id="healthResult" style="background:var(--bg3);padding:10px;border-radius:var(--radius);font-size:11px;white-space:pre-wrap">Click a button above…</pre>
+    </div>
+  </div>
+
+  <!-- ══ QUICK LINKS ════════════════════════════════════════════════════ -->
+  <div class="section" id="sec-links">
+    <div class="section-title">&#128279; Quick Links &amp; Port Reference</div>
+    <div class="grid-3 gap">
+      <div class="card">
+        <div class="card-title">&#129302; Triton Inference Server</div>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:13px">
+          <div class="pill">Port 8000 — HTTP API</div>
+          <a href="http://localhost:8000/v2" target="_blank">v2/</a>
+          <a href="http://localhost:8000/v2/health/ready" target="_blank">v2/health/ready</a>
+          <a href="http://localhost:8000/v2/health/live" target="_blank">v2/health/live</a>
+        </div>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;font-size:13px">
+          <div class="pill">Port 8001 — gRPC</div>
+          <div class="pill">Port 8002 — Prometheus Metrics</div>
+          <a href="http://localhost:8002/metrics" target="_blank">:8002/metrics</a>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">&#127970; Driver Analytics REST API</div>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:13px">
+          <div class="pill">Port 8080</div>
+          <a href="http://localhost:8080/docs" target="_blank">&#x1F4DA; Swagger UI /docs</a>
+          <a href="http://localhost:8080/redoc" target="_blank">&#x1F4D8; ReDoc /redoc</a>
+          <a href="http://localhost:8080/healthz" target="_blank">/healthz</a>
+          <a href="http://localhost:8080/v1/tenants" target="_blank">/v1/tenants</a>
+          <a href="http://localhost:8080/v1/streams" target="_blank">/v1/streams</a>
+          <a href="http://localhost:8080/v1/events" target="_blank">/v1/events</a>
+          <a href="http://localhost:8080/v1/models" target="_blank">/v1/models</a>
+          <a href="http://localhost:8080/v1/evidence" target="_blank">/v1/evidence</a>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">&#128193; MinIO Object Storage</div>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:13px">
+          <div class="pill">Port 9000 — S3 API</div>
+          <div class="pill">Port 9001 — Web Console</div>
+          <a href="http://localhost:9001" target="_blank">&#x1F517; Open Console</a>
+          <div style="font-size:11px;color:var(--text2)">User: <code>minio</code> / Pass: <code>minio12345</code></div>
+          <a href="http://localhost:9001/browser/driver-evidence" target="_blank">Evidence Bucket</a>
+          <a href="http://localhost:9001/browser/driver-models" target="_blank">Models Bucket</a>
+          <a href="http://localhost:9000/minio/health/live" target="_blank">Health Check</a>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">&#128225; Redpanda (Kafka API)</div>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:13px">
+          <div class="pill">Port 9644 — Admin API</div>
+          <div class="pill">Port 19092 — Kafka External</div>
+          <div class="pill">Port 18081 — Schema Registry</div>
+          <div class="pill">Port 18082 — REST Proxy</div>
+          <div class="pill">Port 8085 — Console UI</div>
+          <a href="http://localhost:8085" target="_blank">&#x1F517; Redpanda Console</a>
+          <a href="http://localhost:9644/v1/cluster" target="_blank">Admin: /v1/cluster</a>
+          <a href="http://localhost:9644/v1/topics" target="_blank">Admin: /v1/topics</a>
+          <a href="http://localhost:18081/subjects" target="_blank">Schema Registry</a>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">&#128200; Observability</div>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:13px">
+          <div class="pill">Port 3000 — Grafana</div>
+          <a href="http://localhost:3000" target="_blank">&#x1F517; Grafana (admin/admin)</a>
+          <a href="http://localhost:3000/d/driver-pipeline" target="_blank">Pipeline Dashboard</a>
+          <div class="pill">Port 9090 — Prometheus</div>
+          <a href="http://localhost:9090" target="_blank">&#x1F517; Prometheus UI</a>
+          <a href="http://localhost:9090/api/v1/targets" target="_blank">Targets</a>
+          <a href="http://localhost:9090/api/v1/rules" target="_blank">Rules</a>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">&#127909; MediaMTX (Synthetic RTSP)</div>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:13px">
+          <div class="pill">Port 8554 — RTSP</div>
+          <div class="pill">Port 8888 — HLS</div>
+          <div class="pill">Port 9997 — MediaMTX API</div>
+          <a href="http://localhost:8888/driver_synth/index.m3u8" target="_blank">driver_synth HLS</a>
+          <a href="http://localhost:9997/v3/paths/list" target="_blank">API: paths list</a>
+          <div style="font-size:11px;color:var(--text2)">RTSP: <code>rtsp://localhost:8554/driver_synth</code></div>
+          <div style="font-size:11px;color:var(--text2)">HLS: <code>http://localhost:8888/driver_synth/index.m3u8</code></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">&#128274; Other Ports You May Need</div>
+        <div class="metric-kv" style="font-size:12px;gap:4px 12px">
+          <span class="metric-k">6379</span><span class="metric-v" style="font-size:12px">Redis</span>
+          <span class="metric-k">5432</span><span class="metric-v" style="font-size:12px">PostgreSQL</span>
+          <span class="metric-k">4317</span><span class="metric-v" style="font-size:12px">OTel gRPC</span>
+          <span class="metric-k">4318</span><span class="metric-v" style="font-size:12px">OTel HTTP</span>
+          <span class="metric-k">9100</span><span class="metric-v" style="font-size:12px">Services Prometheus metrics</span>
+          <span class="metric-k">9997</span><span class="metric-v" style="font-size:12px">MediaMTX API</span>
+          <span class="metric-k">8001</span><span class="metric-v" style="font-size:12px">Triton gRPC</span>
+          <span class="metric-k">19092</span><span class="metric-v" style="font-size:12px">Redpanda Kafka (external)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <div class="card-title">&#128736; CORS Notes for Browser Access</div>
+      <div style="font-size:13px;line-height:1.7;color:var(--text2)">
+        <strong style="color:var(--text)">REST API (8080)</strong>: CORS fully enabled (<code>allow_origins=["*"]</code>). Works natively. <br>
+        <strong style="color:var(--text)">Triton (8000/8002), Redpanda (9644), Prometheus (9090), MinIO (9000)</strong>: May not include CORS headers by default.
+        <ul style="margin:8px 0 0 16px;font-size:12px">
+          <li>Use the <a href="https://chrome.google.com/webstore/detail/allow-cors-access-control/lhobafahddgcelffkeicbaginigeejlf" target="_blank">Allow CORS</a> browser extension during development.</li>
+          <li>Or open Chrome with <code>--disable-web-security --user-data-dir=/tmp/cors-test</code></li>
+          <li>Or run this dashboard via a reverse proxy (nginx) that adds CORS headers.</li>
+          <li>MinIO — CORS can be configured in Console → Settings.</li>
+          <li>Prometheus — restart with <code>--web.enable-lifecycle</code> or use Grafana as proxy.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- ── CORS Modal ──────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="corsModal">
+  <div class="modal">
+    <div class="modal-title">&#9888; CORS Policy Blocked Some Requests</div>
+    <div class="modal-body">
+      Some services (Triton, Redpanda, Prometheus, MinIO) don't include CORS headers by default,
+      so your browser blocks the requests.<br><br>
+      <strong>Quick Dev Fix (Chrome):</strong>
+      <pre>chrome.exe --disable-web-security --user-data-dir="C:\Temp\chrome-cors"</pre>
+      <strong>Install extension:</strong><br>
+      <a href="https://chrome.google.com/webstore/detail/allow-cors-access-control/lhobafahddgcelffkeicbaginigeejlf" target="_blank">Allow CORS: Access-Control-Allow-Origin</a><br><br>
+      <strong>Permanent fix — serve via nginx with CORS headers.</strong><br><br>
+      The REST API on port 8080 is fully CORS-enabled and will always work.
+    </div>
+    <div class="modal-close">
+      <button class="btn primary" onclick="closeCorsModal()">Got it</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ JAVASCRIPT ══════════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+/* ── Config ──────────────────────────────────────────────────────────────── */
+const API       = 'http://localhost:8080';
+const TRITON    = 'http://localhost:8000';
+const TRITON_M  = 'http://localhost:8002';
+const MINIO     = 'http://localhost:9000';
+const MINIO_CON = 'http://localhost:9001';
+const RP_ADMIN  = 'http://localhost:9644';
+const PROMETHEUS= 'http://localhost:9090';
+const MEDIAMTX  = 'http://localhost:9997';
+
+/* ── State ───────────────────────────────────────────────────────────────── */
+let globalTenant = '';
+let wsConnection = null;
+let inferenceWsConnection = null;
+let allAlerts    = [];        // raw alert objects for filtering
+let alertCounts  = {};        // type → count
+let alertTrendData = [];
+let hlsInstance   = null;
+let corsWarned    = false;
+let streamSource  = 'hls';          // 'hls' | 'file' | 'url'
+let hlsRetryTimer = null;
+let hlsRetryCount = 0;
+let lastScoreUpdateTime = 0;
+let scoresStaleTimer = null;
+let inferenceReconnectTimer = null;
+let activeStreamId = null;
+let streamIdByMediaPath = {};
+let streamBackfillToken = 0;
+/* ── Detection bbox overlay ───────────────────────────── */
+const activeBoxes = [];  // { boxes:[{x,y,w,h,label,color,conf}], createdAt, ttl }
+let canvasRafId   = null;
+let rtdEnabled    = false;
+let streamBehaviorChart = null;
+let alertTrendChart     = null;
+let alertPieChart       = null;
+let latencyChart        = null;
+let reqCountChart       = null;
+let stateChart          = null;
+let stateCounts = { NORMAL:0, DISTRACTED:0, DROWSY:0, UNSAFE:0, CRITICAL:0, RECOVERED:0 };
+let newAlertCount = 0;
+
+const RTD_SIGNAL_TTL_MS = 3000;
+const RTD_EAR_THRESHOLD = 0.21;
+const RTD_DISTRACT_YAW_DEG = 30;
+const RTD_DISTRACT_PITCH_DEG = 20;
+const RTD_THRESHOLDS = {
+  phone: 0.35,
+  seatbelt: 0.5,
+  smoking: 0.35,
+  eating: 0.35,
+  drowsy: 0.45,
+  distract: 0.45,
+  hands: 0.5,
+};
+const RTD_BOX_STYLES = {
+  DriverBehaviour: { label: 'DRIVER', color: '#3fb950' },
+  seatbelt: { label: 'SEATBELT', color: '#3fb950' },
+  wheel: { label: 'WHEEL', color: '#3fb950' },
+  phone: { label: 'PHONE', color: '#f85149' },
+  cigarette: { label: 'SMOKING', color: '#f85149' },
+  foodItem: { label: 'EATING', color: '#f85149' },
+};
+let rtdSignals = freshRTDSignals();
+
+function freshRTDSignals() {
+  return {
+    phone: { value: null, ts: 0 },
+    seatbelt: { value: null, ts: 0 },
+    smoking: { value: null, ts: 0 },
+    eating: { value: null, ts: 0 },
+    drowsy: { value: null, ts: 0 },
+    distract: { value: null, ts: 0 },
+    hands: { value: null, ts: 0 },
+  };
+}
+
+/* ── Utilities ───────────────────────────────────────────────────────────── */
+const $ = id => document.getElementById(id);
+
+function fmtTime(nsOrMs) {
+  if (!nsOrMs) return '—';
+  const ms = nsOrMs > 1e15 ? nsOrMs / 1e6 : nsOrMs;
+  return new Date(ms).toLocaleTimeString();
+}
+
+function fmtTs(ns) {
+  if (!ns) return '—';
+  return new Date(ns / 1e6).toLocaleString();
+}
+
+function colorForScore(v) {
+  if (v > 0.7) return '#f85149';
+  if (v > 0.4) return '#ffa657';
+  if (v > 0.2) return '#d29922';
+  return '#3fb950';
+}
+
+function statusBadge(ok, okText='OK', errText='Error') {
+  return `<span class="badge ${ok ? 'ok' : 'err'}">${ok ? okText : errText}</span>`;
+}
+
+function clamp01(v) {
+  return Math.max(0, Math.min(1, v));
+}
+
+function inferStreamIdFromHlsUrl(url) {
+  try {
+    const parsed = new URL(url);
+    const match = parsed.pathname.match(/\/([^/]+)\/index\.m3u8$/i);
+    return match ? decodeURIComponent(match[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function inferMediaPathFromStreamUrl(url) {
+  try {
+    const parsed = new URL(url);
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    return parts.length ? decodeURIComponent(parts[parts.length - 1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveActiveStreamId(url) {
+  const mediaPath = inferStreamIdFromHlsUrl(url);
+  if (!mediaPath) return null;
+  return streamIdByMediaPath[mediaPath] || mediaPath;
+}
+
+function clearDetectionOverlay() {
+  activeBoxes.length = 0;
+  if (canvasRafId) {
+    cancelAnimationFrame(canvasRafId);
+    canvasRafId = null;
+  }
+  const canvas = $('streamCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function resetRTDSignals() {
+  rtdSignals = freshRTDSignals();
+  updateRTD({
+    phone: null,
+    seatbelt: null,
+    smoking: null,
+    eating: null,
+    drowsy: null,
+    distract: null,
+    hands: null,
+  });
+}
+
+function resetStreamDetectionPanel(status = 'No data yet') {
+  if (scoresStaleTimer) {
+    clearTimeout(scoresStaleTimer);
+    scoresStaleTimer = null;
+  }
+  $('scoresNoData').style.display = 'block';
+  $('streamScores').style.display = 'none';
+  $('scoresLastUpdate').textContent = status;
+  ['phone', 'seatbelt', 'smoking', 'eating', 'drowsy', 'distract', 'hands'].forEach(key => {
+    $(`sf-${key}`).style.width = '0%';
+    $(`sv-${key}`).textContent = '0%';
+  });
+  if (streamBehaviorChart) {
+    streamBehaviorChart.data.datasets[0].data = [0, 0, 0, 0, 0, 0, 0];
+    streamBehaviorChart.update();
+  }
+}
+
+function setActiveStreamContext(streamId) {
+  activeStreamId = streamId || null;
+  streamBackfillToken += 1;
+  clearDetectionOverlay();
+  resetRTDSignals();
+  resetStreamDetectionPanel(
+    activeStreamId ? `Watching ${activeStreamId} — waiting for live alerts` : 'No linked live stream selected'
+  );
+  if (activeStreamId && globalTenant) {
+    backfillActiveStreamAlerts(activeStreamId, streamBackfillToken);
+  }
+  reconnectInferenceWS();
+}
+
+function alertMatchesActiveStream(alert) {
+  return Boolean(activeStreamId && alert?.stream_id === activeStreamId);
+}
+
+async function apiFetch(url, opts = {}) {
+  try {
+    const r = await fetch(url, { ...opts, signal: AbortSignal.timeout(8000) });
+    return r;
+  } catch (e) {
+    if (e.name === 'TypeError' && !corsWarned) {
+      corsWarned = true;
+      $('corsWarnBtn').style.display = 'inline-block';
+    }
+    throw e;
+  }
+}
+
+function showMsg(elId, msg, ok = true) {
+  const el = $(elId);
+  if (!el) return;
+  el.style.color = ok ? 'var(--green)' : 'var(--red)';
+  el.textContent = msg;
+  setTimeout(() => { el.textContent = ''; }, 5000);
+}
+
+function closeInferenceWS() {
+  if (inferenceReconnectTimer) {
+    clearTimeout(inferenceReconnectTimer);
+    inferenceReconnectTimer = null;
+  }
+  if (inferenceWsConnection) {
+    inferenceWsConnection.onopen = null;
+    inferenceWsConnection.onclose = null;
+    inferenceWsConnection.onerror = null;
+    inferenceWsConnection.onmessage = null;
+    inferenceWsConnection.close();
+    inferenceWsConnection = null;
+  }
+}
+
+function setRTDSignal(key, value) {
+  if (!(key in rtdSignals)) return;
+  rtdSignals[key] = { value: clamp01(value), ts: Date.now() };
+  refreshRTDFromSignals();
+}
+
+function refreshRTDFromSignals() {
+  const now = Date.now();
+  const fields = {};
+  Object.entries(rtdSignals).forEach(([key, signal]) => {
+    fields[key] = signal.value != null && (now - signal.ts) <= RTD_SIGNAL_TTL_MS ? signal.value : null;
+  });
+  updateRTD(fields);
+}
+
+function signalFromHeadPose(headPose) {
+  if (!headPose) return 0;
+  const yawOff = Math.max(0, Math.abs(headPose.yaw || 0) - RTD_DISTRACT_YAW_DEG) / 30;
+  const pitchOff = Math.max(0, Math.abs(headPose.pitch || 0) - RTD_DISTRACT_PITCH_DEG) / 20;
+  return clamp01(Math.max(yawOff, pitchOff));
+}
+
+function signalFromEar(face) {
+  if (face?.ear_left == null || face?.ear_right == null) return null;
+  const ear = (face.ear_left + face.ear_right) / 2;
+  return clamp01((RTD_EAR_THRESHOLD - ear) / RTD_EAR_THRESHOLD);
+}
+
+function inferenceBoxesToOverlayRegions(detection) {
+  const frameWidth = Number(detection?.frame_width);
+  const frameHeight = Number(detection?.frame_height);
+  const sourceBoxes = Array.isArray(detection?.boxes) ? detection.boxes : [];
+  if (!frameWidth || !frameHeight || !sourceBoxes.length) return [];
+
+  const topByClass = new Map();
+  sourceBoxes.forEach(box => {
+    if (!box?.cls_name) return;
+    const prev = topByClass.get(box.cls_name);
+    if (!prev || (box.conf || 0) > (prev.conf || 0)) {
+      topByClass.set(box.cls_name, box);
+    }
+  });
+
+  return Array.from(topByClass.values()).map(box => {
+    const xyxy = Array.isArray(box.xyxy) ? box.xyxy.map(Number) : [];
+    if (xyxy.length !== 4 || xyxy.some(Number.isNaN)) return null;
+    const [x1, y1, x2, y2] = xyxy;
+    const x = clamp01(x1 / frameWidth);
+    const y = clamp01(y1 / frameHeight);
+    const w = Math.min(clamp01((x2 - x1) / frameWidth), 1 - x);
+    const h = Math.min(clamp01((y2 - y1) / frameHeight), 1 - y);
+    if (w <= 0 || h <= 0) return null;
+    const style = RTD_BOX_STYLES[box.cls_name] || { label: String(box.cls_name).toUpperCase(), color: '#3fb950' };
+    return {
+      x,
+      y,
+      w,
+      h,
+      color: style.color,
+      label: `${style.label} ${(Number(box.conf || 0) * 100).toFixed(0)}%`,
+    };
+  }).filter(Boolean);
+}
+
+function setRealtimeOverlayBoxes(regions) {
+  activeBoxes.length = 0;
+  if (!regions.length) {
+    clearDetectionOverlay();
+    return;
+  }
+  activeBoxes.push({ boxes: regions, createdAt: Date.now(), ttl: 1400 });
+  if (!canvasRafId) startCanvasDraw();
+}
+
+function updateRTDFromDetection(detection) {
+  const perCls = {};
+  (detection?.boxes || []).forEach(box => {
+    const key = box?.cls_name;
+    if (!key) return;
+    perCls[key] = Math.max(perCls[key] || 0, Number(box.conf || 0));
+  });
+  setRTDSignal('phone', perCls.phone || 0);
+  setRTDSignal('smoking', perCls.cigarette || 0);
+  setRTDSignal('eating', perCls.foodItem || 0);
+  setRTDSignal('seatbelt', 1 - (perCls.seatbelt || 0));
+  const regions = inferenceBoxesToOverlayRegions(detection);
+  setRealtimeOverlayBoxes(regions);
+}
+
+function updateRTDFromFace(face) {
+  const drowsy = signalFromEar(face);
+  if (drowsy != null) setRTDSignal('drowsy', drowsy);
+  setRTDSignal('distract', signalFromHeadPose(face?.head_pose));
+}
+
+function handleInferenceEnvelope(raw) {
+  let env;
+  try { env = JSON.parse(raw); } catch { return; }
+  if (!rtdEnabled || !activeStreamId || env?.stream_id !== activeStreamId) return;
+
+  if (env.kind === 'detection' && env.detection) {
+    updateRTDFromDetection(env.detection);
+  } else if (env.kind === 'face' && env.face) {
+    updateRTDFromFace(env.face);
+  } else if (env.kind === 'hand' && env.hand) {
+    setRTDSignal('hands', env.hand.hand_on_wheel ? 0 : 1);
+  } else if (env.kind === 'eye' && env.eye) {
+    setRTDSignal('drowsy', env.eye.eyes_closed_prob || 0);
+  }
+}
+
+function reconnectInferenceWS() {
+  closeInferenceWS();
+  if (!rtdEnabled || !globalTenant || !activeStreamId || streamSource === 'demo') return;
+
+  const url = `ws://localhost:8080/v1/ws/inference?tenant_id=${encodeURIComponent(globalTenant)}&stream_id=${encodeURIComponent(activeStreamId)}`;
+  try {
+    inferenceWsConnection = new WebSocket(url);
+    inferenceWsConnection.onmessage = e => handleInferenceEnvelope(e.data);
+    inferenceWsConnection.onclose = () => {
+      inferenceWsConnection = null;
+      if (!rtdEnabled || !globalTenant || !activeStreamId || streamSource === 'demo') return;
+      inferenceReconnectTimer = setTimeout(reconnectInferenceWS, 2000);
+    };
+    inferenceWsConnection.onerror = () => {
+      if (inferenceWsConnection) inferenceWsConnection.close();
+    };
+  } catch (_) {}
+}
+
+function mergeAlerts(rows, prepend = true) {
+  let changed = false;
+  rows.forEach(row => {
+    if (!row?.alert_id) return;
+    if (allAlerts.some(existing => existing.alert_id === row.alert_id)) return;
+    if (prepend) allAlerts.unshift(row);
+    else allAlerts.push(row);
+    changed = true;
+  });
+  if (allAlerts.length > 200) allAlerts.length = 200;
+  return changed;
+}
+
+async function backfillActiveStreamAlerts(streamId, token, attempts = 12) {
+  if (!streamId || !globalTenant || token !== streamBackfillToken) return;
+
+  try {
+    const rows = await apiFetch(
+      `${API}/v1/events?tenant_id=${encodeURIComponent(globalTenant)}&stream_id=${encodeURIComponent(streamId)}&limit=10`
+    ).then(r => r.json());
+
+    if (token !== streamBackfillToken || activeStreamId !== streamId) return;
+
+    if (rows.length) {
+      const changed = mergeAlerts(rows, true);
+      if (changed) renderAlertFeed();
+      const latest = rows[0];
+      if (latest?.scores) updateStreamScores(latest.scores);
+      if (latest?.type) triggerDetectionOverlay(latest.type, latest.severity, latest.scores);
+      $('scoresLastUpdate').textContent = `Recovered from recent alert at ${fmtTime(latest?.ts_capture_ns)}`;
+      showMsg('fileUploadMsg', `Loaded ${rows.length} recent alert(s) for ${streamId}`, true);
+      return;
+    }
+  } catch (_) {
+    if (token !== streamBackfillToken) return;
+  }
+
+  if (attempts > 1 && token === streamBackfillToken && activeStreamId === streamId) {
+    setTimeout(() => {
+      backfillActiveStreamAlerts(streamId, token, attempts - 1);
+    }, 2000);
+  }
+}
+
+/* ── Clock ────────────────────────────────────────────────────────────────── */
+function updateClock() {
+  $('clock').textContent = new Date().toLocaleTimeString();
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+/* ── Tab Navigation ──────────────────────────────────────────────────────── */
+function switchTab(name) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.navtab').forEach(b => b.classList.remove('active'));
+  $(`sec-${name}`).classList.add('active');
+  $(`tab-${name}`).classList.add('active');
+
+  // Reset new alert badge when visiting alerts tab
+  if (name === 'alerts') {
+    newAlertCount = 0;
+    $('alertBadge').style.display = 'none';
+    $('alertBadge').textContent = '';
+  }
+
+  // Lazy-load data for each tab
+  if (name === 'streams')   loadStreams();
+  if (name === 'tenants')   loadTenants();
+  if (name === 'models')    { loadTritonHealth(); loadTritonModels(); loadDbModels(); }
+  if (name === 'storage')   { checkMinIO(); loadEvidenceMeta(); }
+  if (name === 'messaging') { loadRpCluster(); loadTopics(); }
+  if (name === 'metrics')   { loadTritonMetrics(); initMetricCharts(); }
+}
+
+/* ── CORS Modal ───────────────────────────────────────────────────────────── */
+function openCorsModal()  { $('corsModal').classList.add('open'); }
+function closeCorsModal() { $('corsModal').classList.remove('open'); }
+
+/* ── Service Health Definitions ───────────────────────────────────────────── */
+const SERVICES = [
+  { id: 'api',       name: 'REST API',           port: 8080, url: `${API}/healthz`,           link: `${API}/docs`,           linkTxt: 'Open Swagger' },
+  { id: 'triton',    name: 'Triton HTTP',         port: 8000, url: `${TRITON}/v2/health/live`, link: TRITON+'/v2',           linkTxt: 'v2/' },
+  { id: 'tritonm',   name: 'Triton Metrics',      port: 8002, url: `${TRITON_M}/metrics`,      link: TRITON_M+'/metrics',    linkTxt: '/metrics' },
+  { id: 'minio',     name: 'MinIO S3',            port: 9000, url: `${MINIO}/minio/health/live`,link: MINIO_CON,             linkTxt: 'Open Console' },
+  { id: 'minioc',    name: 'MinIO Console',       port: 9001, url: MINIO_CON,                  link: MINIO_CON,             linkTxt: 'Open' },
+  { id: 'rpadmin',   name: 'Redpanda Admin',      port: 9644, url: `${RP_ADMIN}/v1/cluster`,   link: 'http://localhost:8085',linkTxt: 'Console' },
+  { id: 'prom',      name: 'Prometheus',          port: 9090, url: `${PROMETHEUS}/-/healthy`,  link: PROMETHEUS,            linkTxt: 'Open' },
+  { id: 'rpconsole', name: 'Redpanda Console',    port: 8085, url: 'http://localhost:8085',    link: 'http://localhost:8085',linkTxt: 'Open' },
+  { id: 'grafana',   name: 'Grafana',             port: 3000, url: 'http://localhost:3000/api/health', link: 'http://localhost:3000', linkTxt: 'Open' },
+  { id: 'mediamtx',  name: 'MediaMTX',            port: 8888, url: `${MEDIAMTX}/v3/paths/list`,link: MEDIAMTX+'/v3/paths/list', linkTxt: 'API' },
+];
+
+function buildSvcGrid() {
+  const grid = $('svcGrid');
+  grid.innerHTML = SERVICES.map(s => `
+    <div class="svc-card checking" id="svc-${s.id}">
+      <div class="svc-name">${s.name}</div>
+      <div class="svc-port">port ${s.port}</div>
+      <div class="svc-status" id="svc-${s.id}-status">Checking…</div>
+      <div class="svc-latency" id="svc-${s.id}-latency"></div>
+      <div class="svc-action"><a href="${s.link}" target="_blank">&#x1F517; ${s.linkTxt}</a></div>
+    </div>
+  `).join('');
+}
+
+async function checkService(s) {
+  const card   = $(`svc-${s.id}`);
+  const status = $(`svc-${s.id}-status`);
+  const lat    = $(`svc-${s.id}-latency`);
+  const t0 = performance.now();
+  try {
+    const r = await apiFetch(s.url, { mode: 'cors' });
+    const ms = (performance.now() - t0).toFixed(0);
+    card.className = 'svc-card ' + (r.ok ? 'ok' : 'warn');
+    status.innerHTML = r.ok ? statusBadge(true, r.status.toString()) : statusBadge(false, r.status.toString());
+    lat.textContent = `${ms} ms`;
+    $(`dot-${navDotForSvc(s.id)}`)?.classList.replace('yellow','green');
+  } catch (e) {
+    const ms = (performance.now() - t0).toFixed(0);
+    card.className = 'svc-card err';
+    status.innerHTML = statusBadge(false, 'Unreachable');
+    lat.textContent = e.name === 'AbortError' ? 'Timeout' : (e.message || 'CORS/Network');
+  }
+}
+
+function navDotForSvc(id) {
+  const map = { api: 'overview', triton: 'models', tritonm: 'metrics', minio: 'storage', minioc: 'storage',
+                rpadmin: 'messaging', prom: 'metrics', rpconsole: 'messaging', grafana: 'metrics', mediamtx: 'streams' };
+  return map[id] || null;
+}
+
+async function checkAllServices() {
+  await Promise.allSettled(SERVICES.map(s => checkService(s)));
+}
+
+/* ── Global Tenant ────────────────────────────────────────────────────────── */
+function setGlobalTenant() {
+  const v = $('globalTenantId').value.trim();
+  if (!v) return;
+  globalTenant = v;
+  $('tenantStatus').textContent = `Active tenant: ${v}`;
+  $('tenantStatus').style.color = 'var(--green)';
+  reconnectWS();
+  reconnectInferenceWS();
+  loadOverviewAlerts();
+  loadQuickStats();
+}
+
+/* ── Quick Stats ─────────────────────────────────────────────────────────── */
+async function loadQuickStats() {
+  try {
+    const [tRes, sRes, mRes] = await Promise.allSettled([
+      apiFetch(`${API}/v1/tenants`).then(r => r.json()),
+      apiFetch(`${API}/v1/streams${globalTenant ? '?tenant_id='+globalTenant : ''}`).then(r => r.json()),
+      apiFetch(`${API}/v1/models`).then(r => r.json()),
+    ]);
+    if (tRes.status === 'fulfilled') $('qs-tenants').textContent = tRes.value.length;
+    if (sRes.status === 'fulfilled') $('qs-streams').textContent = sRes.value.length;
+    if (mRes.status === 'fulfilled') $('qs-models').textContent = mRes.value.length;
+  } catch (_) {}
+
+  try {
+    const evMeta = await apiFetch(`${API}/v1/evidence`).then(r => r.json());
+    $('qs-bucket').textContent = evMeta.bucket || '—';
+  } catch (_) {}
+
+  if (globalTenant) {
+    try {
+      const ev = await apiFetch(`${API}/v1/events?tenant_id=${globalTenant}&limit=100`).then(r => r.json());
+      $('qs-alerts').textContent = ev.length;
+    } catch (_) {}
+  }
+}
+
+/* ── Overview Alerts ────────────────────────────────────────────────────── */
+async function loadOverviewAlerts() {
+  if (!globalTenant) return;
+  try {
+    const rows = await apiFetch(`${API}/v1/events?tenant_id=${globalTenant}&limit=20`).then(r => r.json());
+    const container = $('overviewAlertList');
+    if (!rows.length) { container.innerHTML = '<div class="empty">No alerts found</div>'; return; }
+    container.innerHTML = rows.map(r => alertRowHTML(r)).join('');
+    // Update state chart
+    rows.forEach(r => { if (r.state) stateCounts[r.state] = (stateCounts[r.state] || 0) + 1; });
+    updateStateChart();
+  } catch (e) {
+    $('overviewAlertList').innerHTML = `<div class="empty" style="color:var(--red)">Error: ${e.message}</div>`;
+  }
+}
+
+function alertRowHTML(r) {
+  const sev = r.severity || 'low';
+  const icon = { phone_use:'📱', no_seatbelt:'🔴', smoking:'🚬', eating:'🍔', drowsiness:'😴', distraction:'👀', hands_off_wheel:'🙌' };
+  return `
+    <div class="alert-item" onclick="$('ev-alertId').value='${r.alert_id}';switchTab('storage')">
+      <div class="alert-dot ${sev}"></div>
+      <div class="alert-body">
+        <div class="alert-type">${icon[r.type]||'⚠️'} ${(r.type||'').replace(/_/g,' ')}</div>
+        <div class="alert-meta">${r.stream_id || '—'} · ${r.state || '—'} · <span class="severity-tag sev-${sev}">${sev}</span></div>
+      </div>
+      <div class="alert-time">${fmtTs(r.ts_capture_ns)}</div>
+    </div>`;
+}
+
+/* ── State Chart ─────────────────────────────────────────────────────────── */
+function initStateChart() {
+  const ctx = $('stateChart').getContext('2d');
+  stateChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['NORMAL','DISTRACTED','DROWSY','UNSAFE','CRITICAL','RECOVERED'],
+      datasets: [{ data: [1,0,0,0,0,0], backgroundColor: ['#3fb950','#ffa657','#bc8cff','#f85149','#d10000','#58a6ff'], borderWidth: 0 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#8b949e', font: { size: 10 } } } } }
+  });
+}
+
+function updateStateChart() {
+  if (!stateChart) return;
+  const labels = ['NORMAL','DISTRACTED','DROWSY','UNSAFE','CRITICAL','RECOVERED'];
+  stateChart.data.datasets[0].data = labels.map(l => stateCounts[l] || 0);
+  stateChart.update();
+}
+
+/* ── Streams ─────────────────────────────────────────────────────────────── */
+async function loadStreams() {
+  try {
+    const url = `${API}/v1/streams${globalTenant ? '?tenant_id='+globalTenant : ''}`;
+    const rows = await apiFetch(url).then(r => r.json());
+    streamIdByMediaPath = {};
+    rows.forEach(r => {
+      const mediaPath = inferMediaPathFromStreamUrl(r.url);
+      if (mediaPath) streamIdByMediaPath[mediaPath] = r.id;
+    });
+    const tb = $('streamsTbody');
+    if (!rows.length) { tb.innerHTML = '<tr><td colspan="7" class="empty">No streams registered</td></tr>'; return; }
+    tb.innerHTML = rows.map(r => `
+      <tr>
+        <td class="mono">${r.id}</td>
+        <td>${r.tenant_id}</td>
+        <td class="mono" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.url}">${r.url}</td>
+        <td><span class="badge info">${r.protocol}</span></td>
+        <td>${r.driver_id || '—'}</td>
+        <td>${r.enabled ? '<span class="badge ok">Enabled</span>' : '<span class="badge err">Disabled</span>'}</td>
+        <td><button class="btn sm" onclick="playHls('${r.url}','${r.id}')">&#9654; Preview</button></td>
+      </tr>`).join('');
+  } catch (e) {
+    $('streamsTbody').innerHTML = `<tr><td colspan="7" class="empty" style="color:var(--red)">${e.message}</td></tr>`;
+  }
+}
+
+async function createStream() {
+  const id=  $('ns-id').value.trim();
+  const tid= $('ns-tenant').value.trim() || globalTenant;
+  const url= $('ns-url').value.trim();
+  const proto=$('ns-proto').value;
+  const driver=$('ns-driver').value.trim() || undefined;
+  if (!id || !tid || !url) { showMsg('streamMsg','Fill in ID, Tenant, and URL',false); return; }
+  try {
+    const r = await apiFetch(`${API}/v1/streams`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ id, tenant_id: tid, url, protocol: proto, driver_id: driver })
+    });
+    const data = await r.json();
+    showMsg('streamMsg', r.ok ? 'Stream created!' : `Error: ${JSON.stringify(data)}`  , r.ok);
+    if (r.ok) loadStreams();
+  } catch (e) { showMsg('streamMsg', e.message, false); }
+}
+
+function playHls(url, name) {
+  setStreamSource('hls');
+  const mediaPath = inferMediaPathFromStreamUrl(url) || name || 'stream';
+  $('hlsUrl').value = `http://localhost:8888/${encodeURIComponent(mediaPath)}/index.m3u8`;
+  setActiveStreamContext(name || null);
+  switchTab('streams');
+  loadStream();
+}
+
+/* ── Stream source selector ─────────────────────────────────────────────── */
+function setStreamSource(type) {
+  streamSource = type;
+  ['hls','file','url','demo'].forEach(t => {
+    const btn = $(`srcBtn${t.charAt(0).toUpperCase()+t.slice(1)}`);
+    if (btn) btn.classList.toggle('active', t === type);
+    const row = $(`src${t.charAt(0).toUpperCase()+t.slice(1)}Row`);
+    if (row) row.style.display = t === type ? '' : 'none';
+  });
+}
+
+async function uploadLocalFileForAnalysis(file) {
+  if (!globalTenant) {
+    showMsg('fileUploadMsg', 'Set a Tenant ID in Overview before analyzing a local file.', false);
+    return null;
+  }
+
+  showMsg('fileUploadMsg', `Uploading ${file.name} for analysis…`, true);
+
+  let response;
+  try {
+    response = await fetch(
+      `${API}/v1/streams/upload?tenant_id=${encodeURIComponent(globalTenant)}&fps=8&loops=1`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': file.type || 'application/octet-stream',
+          'X-Filename': file.name,
+        },
+        body: file,
+      }
+    );
+  } catch (e) {
+    if (e.name === 'TypeError' && !corsWarned) {
+      corsWarned = true;
+      $('corsWarnBtn').style.display = 'inline-block';
+    }
+    throw e;
+  }
+
+  let payload = {};
+  try {
+    payload = await response.json();
+  } catch (_) {}
+
+  if (!response.ok) {
+    throw new Error(payload.detail || `Upload failed (${response.status})`);
+  }
+
+  return payload;
+}
+
+/* ── Local file loader ───────────────────────────────────────────────────── */
+async function loadLocalFile() {
+  const f = $('fileInput').files[0];
+  if (!f) { alert('Please pick a video file first.'); return; }
+  stopDemo();
+  setActiveStreamContext(null);
+  if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+  if (hlsRetryTimer) { clearTimeout(hlsRetryTimer); hlsRetryTimer = null; }
+  const video = $('streamVideo');
+  // Must clear srcObject (e.g. from demo canvas stream) before assigning src
+  if (video.srcObject) { video.srcObject.getTracks && video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
+  if (video.src && video.src.startsWith('blob:')) URL.revokeObjectURL(video.src);
+  video.src = URL.createObjectURL(f);
+  video.loop = $('loopChk').checked;
+  video.load();  // force reload with new src
+  video.play().catch(e => console.warn('autoplay blocked:', e));
+  $('streamOverlay').style.display = 'none';
+  $('streamRetryBtn').style.display = 'none';
+  $('streamStatusTxt').innerHTML = `&#9654; ${f.name}`;
+  $('streamStatusTxt').style.color = 'var(--green)';
+  $('streamLoopBadge').style.display = video.loop ? 'inline' : 'none';
+  attachVideoListeners(video, 'file');
+
+  try {
+    const upload = await uploadLocalFileForAnalysis(f);
+    if (!upload) {
+      $('streamStatusTxt').textContent = `Playing ${f.name} locally`;
+      $('streamStatusTxt').style.color = 'var(--accent)';
+      return;
+    }
+    setActiveStreamContext(upload.stream_id || null);
+    $('streamStatusTxt').textContent = `Analyzing ${f.name}`;
+    $('streamStatusTxt').style.color = 'var(--green)';
+    showMsg('fileUploadMsg', `Analyzing ${f.name} as ${upload.stream_id}`, true);
+  } catch (e) {
+    $('streamStatusTxt').textContent = `Playing ${f.name} locally`;
+    $('streamStatusTxt').style.color = 'var(--accent)';
+    showMsg('fileUploadMsg', `Analysis upload failed: ${e.message}`, false);
+  }
+}
+
+function loadDirectUrl() {
+  const url = $('directUrl').value.trim();
+  if (!url) return;
+  stopDemo();
+  setActiveStreamContext(null);
+  if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+  const video = $('streamVideo');
+  if (video.srcObject) { video.srcObject.getTracks && video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
+  video.src = url;
+  video.loop = $('loopChk').checked;
+  video.load();
+  video.play().catch(e => console.warn('autoplay blocked:', e));
+  $('streamOverlay').style.display = 'none';
+  $('streamRetryBtn').style.display = 'none';
+  $('streamStatusTxt').textContent = 'Playing (URL)';
+  $('streamStatusTxt').style.color = 'var(--green)';
+  $('streamLoopBadge').style.display = video.loop ? 'inline' : 'none';
+  attachVideoListeners(video, 'url');
+}
+
+function replayVideo() {
+  const video = $('streamVideo');
+  video.currentTime = 0;
+  video.play().catch(_=>{});
+  $('streamOverlay').style.display = 'none';
+  $('streamStatusTxt').textContent = 'Replaying…';
+  $('streamStatusTxt').style.color = 'var(--accent)';
+}
+
+/* ── HLS Video ──────────────────────────────────────────────────────────── */
+function loadStream() {
+  const url = $('hlsUrl').value.trim();
+  if (!url) return;
+  setActiveStreamContext(resolveActiveStreamId(url));
+  const video = $('streamVideo');
+  const overlay = $('streamOverlay');
+  if (hlsRetryTimer) { clearTimeout(hlsRetryTimer); hlsRetryTimer = null; }
+  hlsRetryCount = 0;
+  overlay.style.display = 'none';
+  $('streamRetryBtn').style.display = 'none';
+  if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+
+  function startHls(src) {
+    if (Hls.isSupported()) {
+      hlsInstance = new Hls({
+        debug: false, enableWorker: true,
+        manifestLoadingMaxRetry: 3, manifestLoadingRetryDelay: 2000,
+        levelLoadingMaxRetry: 3,
+      });
+      hlsInstance.loadSource(src);
+      hlsInstance.attachMedia(video);
+      hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.loop = $('loopChk').checked;
+        video.play().catch(_=>{});
+        hlsRetryCount = 0;
+        overlay.style.display = 'none';
+        $('streamRetryBtn').style.display = 'none';
+        $('streamStatusTxt').innerHTML = '&#9679; Live (HLS)';
+        $('streamStatusTxt').style.color = 'var(--green)';
+        $('streamLoopBadge').style.display = video.loop ? 'inline' : 'none';
+      });
+      hlsInstance.on(Hls.Events.ERROR, (_, data) => {
+        if (!data.fatal) return;
+        hlsRetryCount++;
+        const delay = Math.min(3000 * hlsRetryCount, 15000);
+        $('streamStatusTxt').innerHTML = `&#9888; ${data.details} — retry ${hlsRetryCount} in ${delay/1000}s`;
+        $('streamStatusTxt').style.color = 'var(--yellow)';
+        $('streamOverlayText').textContent = `Stream unavailable: ${data.details}`;
+        $('streamOverlaySub').textContent = `MediaMTX not running or no publisher. Auto-retry in ${delay/1000}s…`;
+        overlay.style.display = 'flex';
+        $('streamRetryBtn').style.display = 'inline-block';
+        hlsInstance.destroy(); hlsInstance = null;
+        hlsRetryTimer = setTimeout(() => startHls(src), delay);
+      });
+      hlsInstance.on(Hls.Events.LEVEL_LOADED, (_, d) => {
+        $('streamHlsInfo').style.display = 'inline';
+        $('streamHlsInfo').textContent = `Frags: ${d.details.fragments.length}`;
+      });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = src;
+      video.loop = $('loopChk').checked;
+      video.play().catch(_=>{});
+      overlay.style.display = 'none';
+      $('streamStatusTxt').textContent = 'Playing (Native HLS)';
+      $('streamStatusTxt').style.color = 'var(--green)';
+    } else {
+      overlay.style.display = 'flex';
+      $('streamOverlayText').textContent = 'HLS not supported in this browser';
+      $('streamStatusTxt').textContent = 'Unsupported';
+    }
+  }
+
+  startHls(url);
+  attachVideoListeners(video, 'hls');
+}
+
+function retryStream() {
+  if (hlsRetryTimer) { clearTimeout(hlsRetryTimer); hlsRetryTimer = null; }
+  loadStream();
+}
+
+function attachVideoListeners(video, mode) {
+  // Resolution
+  video.addEventListener('loadedmetadata', () => {
+    $('streamRes').textContent = `${video.videoWidth}×${video.videoHeight}`;
+  }, { once: true });
+  // FPS counter via requestVideoFrameCallback
+  if (video.requestVideoFrameCallback) {
+    let lastT = 0, frames = 0;
+    const countFps = t => {
+      if (lastT) { frames++; const dt = t - lastT; if (dt >= 1000) { $('streamFps').textContent = Math.round(frames*1000/dt); frames = 0; lastT = t; } }
+      else lastT = t;
+      if (!video.paused && !video.ended) video.requestVideoFrameCallback(countFps);
+    };
+    video.requestVideoFrameCallback(countFps);
+  }
+  // When file/url ends and loop is off — show replay button in overlay
+  if (mode !== 'hls') {
+    video.onended = () => {
+      if (!$('loopChk').checked) {
+        $('streamOverlay').style.display = 'flex';
+        $('streamOverlayText').textContent = 'Video ended';
+        $('streamOverlaySub').textContent = 'Click Replay to watch again or enable Loop';
+        $('streamRetryBtn').style.display = 'inline-block';
+        $('streamRetryBtn').textContent = '&#8635; Replay';
+        $('streamRetryBtn').onclick = replayVideo;
+      }
+    };
+  }
+}
+
+function stopStream() {
+  // Stop demo if running
+  stopDemo();
+  setActiveStreamContext(null);
+  if (hlsRetryTimer) { clearTimeout(hlsRetryTimer); hlsRetryTimer = null; }
+  if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+  const video = $('streamVideo');
+  video.pause();
+  if (video.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
+  if (video.src && video.src.startsWith('blob:')) URL.revokeObjectURL(video.src);
+  video.src = '';
+  video.loop = false;
+  $('streamOverlay').style.display = 'flex';
+  $('streamOverlayText').textContent = 'Stream stopped';
+  $('streamOverlaySub').textContent = '';
+  $('streamRetryBtn').style.display = 'none';
+  $('streamRetryBtn').onclick = retryStream;
+  $('streamRetryBtn').textContent = '\u21BB Retry';
+  $('streamStatusTxt').textContent = 'Idle';
+  $('streamStatusTxt').style.color = '';
+  $('streamRes').textContent = '—';
+  $('streamFps').textContent = '—';
+  $('streamLoopBadge').style.display = 'none';
+  $('fileUploadMsg').textContent = '';
+}
+
+/* ── Demo / Synthetic driver stream ──────────────────────────────────────── */
+let demoAnimId      = null;
+let demoAlertTmr    = null;
+let demoBehIdx      = 0;
+let demoCurBehavior = 'normal'; // drives visual changes in drawDriverScene
+let demoBehaviorTmr = null;     // resets demoCurBehavior to normal mid-cycle
+
+const DEMO_CYCLE = [
+  { type:'drowsiness',      sev:'high',     scores:{ phone:0.02, seatbelt:0.92, smoking:0.01, eating:0.03, drowsy:0.78, distracted:0.12, hand_off_wheel:0.05 } },
+  { type:'phone_use',       sev:'critical', scores:{ phone:0.91, seatbelt:0.88, smoking:0.03, eating:0.04, drowsy:0.08, distracted:0.55, hand_off_wheel:0.20 } },
+  { type:'distraction',     sev:'medium',   scores:{ phone:0.10, seatbelt:0.90, smoking:0.02, eating:0.05, drowsy:0.15, distracted:0.82, hand_off_wheel:0.30 } },
+  { type:'no_seatbelt',     sev:'high',     scores:{ phone:0.05, seatbelt:0.08, smoking:0.02, eating:0.03, drowsy:0.10, distracted:0.20, hand_off_wheel:0.10 } },
+  { type:'hands_off_wheel', sev:'medium',   scores:{ phone:0.05, seatbelt:0.93, smoking:0.02, eating:0.10, drowsy:0.25, distracted:0.38, hand_off_wheel:0.88 } },
+  { type:'eating',          sev:'low',      scores:{ phone:0.04, seatbelt:0.91, smoking:0.05, eating:0.75, drowsy:0.18, distracted:0.42, hand_off_wheel:0.15 } },
+  { type:'smoking',         sev:'medium',   scores:{ phone:0.03, seatbelt:0.90, smoking:0.82, eating:0.08, drowsy:0.22, distracted:0.35, hand_off_wheel:0.10 } },
+];
+
+// Precise normalized boxes that exactly match what drawDriverScene draws for W=640 H=360
+// Face center ≈ (320,108), head ±45×55. Wheel center (320,304) r=52.
+const DEMO_BOXES = {
+  drowsiness:      [{ x:0.39, y:0.04, w:0.22, h:0.44, label:'DROWSY — EYES CLOSED' }],
+  phone_use:       [{ x:0.39, y:0.04, w:0.22, h:0.44, label:'FACE' },
+                    { x:0.59, y:0.07, w:0.06, h:0.24, label:'PHONE' }],
+  distraction:     [{ x:0.20, y:0.04, w:0.26, h:0.44, label:'FACE — HEAD TURNED' }],
+  no_seatbelt:     [{ x:0.24, y:0.36, w:0.38, h:0.35, label:'CHEST — NO SEATBELT' }],
+  hands_off_wheel: [{ x:0.34, y:0.68, w:0.32, h:0.28, label:'WHEEL — HANDS OFF' },
+                    { x:0.20, y:0.68, w:0.14, h:0.14, label:'HAND' },
+                    { x:0.65, y:0.68, w:0.14, h:0.14, label:'HAND' }],
+  eating:          [{ x:0.39, y:0.04, w:0.22, h:0.44, label:'FACE' },
+                    { x:0.26, y:0.30, w:0.22, h:0.22, label:'FOOD' }],
+  smoking:         [{ x:0.39, y:0.04, w:0.22, h:0.44, label:'FACE' },
+                    { x:0.51, y:0.36, w:0.11, h:0.05, label:'CIGARETTE' }],
+};
+
+function startDemo() {
+  stopDemo();
+  setActiveStreamContext(null);
+  if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+  if (hlsRetryTimer) { clearTimeout(hlsRetryTimer); hlsRetryTimer = null; }
+
+  // Off-screen canvas that the video element will display via captureStream
+  const oc  = document.createElement('canvas');
+  oc.width  = 640;
+  oc.height = 360;
+  const ctx = oc.getContext('2d');
+
+  const video = $('streamVideo');
+  video.srcObject = oc.captureStream(30);
+  video.play().catch(_=>{});
+
+  $('streamOverlay').style.display = 'none';
+  $('streamStatusTxt').innerHTML   = '&#129514; Demo Running';
+  $('streamStatusTxt').style.color = '#3fb950';
+  $('streamRes').textContent       = '640\u00d7360';
+  $('streamFps').textContent       = '30';
+  $('streamLoopBadge').style.display = 'none';
+
+  let t = 0;
+  const W = oc.width, H = oc.height;
+
+  function frame() {
+    t += 1/30;
+    drawDriverScene(ctx, W, H, t);
+    demoAnimId = requestAnimationFrame(frame);
+  }
+  demoAnimId = requestAnimationFrame(frame);
+
+  // Fire first alert immediately, then cycle every 4 s
+  function fireAlert() {
+    const e = DEMO_CYCLE[demoBehIdx % DEMO_CYCLE.length];
+    demoBehIdx++;
+    // Switch scene to reflect behavior
+    demoCurBehavior = e.type;
+    // Use DEMO_BOXES: precise coords matching what we actually draw
+    const boxes = (DEMO_BOXES[e.type] || []).map(b => ({ ...b, color: SEV_COLOR[e.sev] || '#f85149' }));
+    triggerDetectionOverlay(e.type, e.sev, e.scores, boxes);
+    updateStreamScores(e.scores);
+    // Reset scene to normal 2.5 s later so viewer sees normal driving between events
+    if (demoBehaviorTmr) clearTimeout(demoBehaviorTmr);
+    demoBehaviorTmr = setTimeout(() => { demoCurBehavior = 'normal'; }, 2500);
+    demoAlertTmr = setTimeout(fireAlert, 4000);
+  }
+  fireAlert();
+}
+
+function stopDemo() {
+  if (demoAnimId)    { cancelAnimationFrame(demoAnimId); demoAnimId = null; }
+  if (demoAlertTmr)  { clearTimeout(demoAlertTmr);  demoAlertTmr  = null; }
+  if (demoBehaviorTmr){ clearTimeout(demoBehaviorTmr); demoBehaviorTmr = null; }
+  demoCurBehavior = 'normal';
+}
+
+/* ── Real-Time Detection HUD ─────────────────────────────────────────────── */
+function toggleRTD() {
+  rtdEnabled = !rtdEnabled;
+  $('rtdHud').classList.toggle('rtd-on', rtdEnabled);
+  const btn = $('rtdToggleBtn');
+  btn.innerHTML = rtdEnabled ? '&#128994; Live Det. ON' : '&#128202; Live Det. OFF';
+  btn.style.borderColor = rtdEnabled ? '#3fb950' : '';
+  btn.style.color       = rtdEnabled ? '#3fb950' : '';
+  if (!rtdEnabled) {
+    closeInferenceWS();
+    resetRTDSignals();
+  } else {
+    reconnectInferenceWS();
+  }
+}
+
+function updateRTD(fields) {
+  // Always update DOM so data is ready when HUD is toggled on
+  const CHIPS = [
+    { id:'phone',    v: fields.phone,    thresh: 0.50 },
+    { id:'seatbelt', v: fields.seatbelt, thresh: 0.50 },  // already inverted (1-score)
+    { id:'smoking',  v: fields.smoking,  thresh: 0.50 },
+    { id:'eating',   v: fields.eating,   thresh: 0.50 },
+    { id:'drowsy',   v: fields.drowsy,   thresh: 0.50 },
+    { id:'distract', v: fields.distract, thresh: 0.50 },
+    { id:'hands',    v: fields.hands,    thresh: 0.50 },
+  ];
+  for (const c of CHIPS) {
+    const chip = $(`rtdc-${c.id}`);
+    const valEl = $(`rtdv-${c.id}`);
+    if (!chip || !valEl) continue;
+    if (c.v == null) {
+      valEl.innerHTML = '&mdash;';
+      chip.className = 'rtd-chip rtd-idle';
+      continue;
+    }
+    valEl.textContent = Math.round(c.v * 100) + '%';
+    chip.className = 'rtd-chip' + (c.v >= c.thresh ? ' rtd-alert' : '');
+  }
+}
+
+// Draw a synthetic driver scene — visual behavior driven by demoCurBehavior
+function drawDriverScene(ctx, W, H, t) {
+  const beh = demoCurBehavior;
+
+  // Background
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#0a0e16'); bg.addColorStop(0.7, '#0f1623'); bg.addColorStop(1, '#141c2e');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+  // Dashboard glow
+  const dg = ctx.createRadialGradient(W/2, H, 0, W/2, H, W*0.7);
+  dg.addColorStop(0, 'rgba(30,80,180,0.35)'); dg.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = dg; ctx.fillRect(0, H*0.65, W, H*0.35);
+
+  // A-pillar windshield frame
+  ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 18;
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(W*0.12, H*0.6); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(W,0); ctx.lineTo(W*0.88, H*0.6); ctx.stroke();
+
+  // Rear-view mirror
+  ctx.fillStyle = '#1e293b'; ctx.fillRect(W/2-28, 0, 56, 28);
+  ctx.fillStyle = '#0ea5e9'; ctx.globalAlpha = 0.3;
+  ctx.fillRect(W/2-24, 2, 48, 22); ctx.globalAlpha = 1;
+
+  // Steering wheel
+  const swX = W/2, swY = H*0.845, swR = 52;
+  ctx.save(); ctx.translate(swX, swY); ctx.rotate(Math.sin(t*0.3)*0.04);
+  ctx.strokeStyle = '#334155'; ctx.lineWidth = 9;
+  ctx.beginPath(); ctx.arc(0,0,swR,0,Math.PI*2); ctx.stroke();
+  ctx.strokeStyle = '#475569'; ctx.lineWidth = 5;
+  for (let i=0;i<3;i++) {
+    const a = (i/3)*Math.PI*2 - Math.PI/2;
+    ctx.beginPath(); ctx.moveTo(Math.cos(a)*14, Math.sin(a)*14);
+    ctx.lineTo(Math.cos(a)*swR, Math.sin(a)*swR); ctx.stroke();
+  }
+  ctx.fillStyle = '#334155'; ctx.beginPath(); ctx.arc(0,0,12,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  // Hands on wheel (context-dependent)
+  if (beh === 'hands_off_wheel') {
+    // Both hands hanging at sides
+    ctx.fillStyle = '#c4a882';
+    ctx.beginPath(); ctx.ellipse(W*0.27, H*0.72, 13, 9, 0.5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(W*0.73, H*0.72, 13, 9, -0.5, 0, Math.PI*2); ctx.fill();
+  } else {
+    ctx.save(); ctx.translate(swX, swY); ctx.rotate(Math.sin(t*0.3)*0.04);
+    ctx.fillStyle = '#c4a882';
+    // Left hand — always on wheel
+    ctx.beginPath(); ctx.ellipse(-swR+4,-8, 10,7, Math.PI*0.3, 0, Math.PI*2); ctx.fill();
+    // Right hand — off wheel if eating or phone_use (moved to prop below)
+    if (beh !== 'phone_use' && beh !== 'eating') {
+      ctx.beginPath(); ctx.ellipse(swR-4,-8, 10,7, -Math.PI*0.3, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Seatbelt strap (hidden if no_seatbelt)
+  if (beh !== 'no_seatbelt') {
+    ctx.save(); ctx.strokeStyle = '#334155'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(W*0.62, H*0.30);
+    ctx.quadraticCurveTo(W*0.58, H*0.60, W*0.38, H*0.82); ctx.stroke();
+    ctx.restore();
+  }
+
+  // Body / shirt
+  const bGrad = ctx.createLinearGradient(W/2-90, H*0.65, W/2+90, H*0.65);
+  bGrad.addColorStop(0,'#1e3a5f'); bGrad.addColorStop(0.5,'#1e4080'); bGrad.addColorStop(1,'#1e3a5f');
+  ctx.fillStyle = bGrad;
+  ctx.beginPath();
+  ctx.moveTo(W/2-95,H); ctx.lineTo(W/2-90,H*0.62);
+  ctx.quadraticCurveTo(W/2-50,H*0.55,W/2,H*0.56);
+  ctx.quadraticCurveTo(W/2+50,H*0.55,W/2+90,H*0.62);
+  ctx.lineTo(W/2+95,H); ctx.closePath(); ctx.fill();
+
+  // Neck
+  ctx.fillStyle = '#c4a882'; ctx.fillRect(W/2-13, H*0.42, 26, H*0.17);
+
+  // Head position — turn & bob depend on behavior
+  const headBob = Math.sin(t*0.9)*2.5 + (beh==='drowsiness' ? Math.sin(t*0.35)*7 : 0);
+  const headTurn = beh==='distraction'
+    ? 28 + Math.sin(t*0.5)*4          // strongly turned away
+    : Math.sin(t*0.22)*4;             // subtle idle sway
+  const hcX = W/2 + headTurn, hcY = H*0.30 + headBob;
+
+  // Head shadow
+  ctx.save(); ctx.globalAlpha=0.25; ctx.fillStyle='#000';
+  ctx.beginPath(); ctx.ellipse(hcX, hcY+55, 38,10,0,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  // Skin
+  const sg = ctx.createRadialGradient(hcX-8, hcY-10, 5, hcX, hcY, 48);
+  sg.addColorStop(0,'#d4a97a'); sg.addColorStop(1,'#b8895a');
+  ctx.fillStyle=sg; ctx.beginPath(); ctx.ellipse(hcX,hcY,40,50,0,0,Math.PI*2); ctx.fill();
+
+  // Ears
+  ctx.fillStyle='#c4956a';
+  ctx.beginPath(); ctx.ellipse(hcX+38,hcY+5,7,10,0.3,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(hcX-38,hcY+5,7,10,-0.3,0,Math.PI*2); ctx.fill();
+
+  // Eyes — drowsy: barely open oscillating, normal: blink every ~4s
+  let eyeOpenFactor;
+  if (beh==='drowsiness') {
+    eyeOpenFactor = 0.07 + Math.abs(Math.sin(t*0.6))*0.13; // droopy
+  } else {
+    const bc = t % 4.0;
+    eyeOpenFactor = bc>3.85 ? Math.max(0, 1-(bc-3.85)*20) : 1.0;
+  }
+  const eyeH = 7*eyeOpenFactor;
+  // whites
+  ctx.fillStyle='#f0ede8';
+  ctx.beginPath(); ctx.ellipse(hcX-15,hcY-5,9,eyeH+2,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(hcX+15,hcY-5,9,eyeH+2,0,0,Math.PI*2); ctx.fill();
+  // iris
+  ctx.fillStyle='#3a2a18';
+  ctx.beginPath(); ctx.ellipse(hcX-14,hcY-5,5,eyeH,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(hcX+16,hcY-5,5,eyeH,0,0,Math.PI*2); ctx.fill();
+  // glint
+  ctx.fillStyle='#fff';
+  ctx.beginPath(); ctx.arc(hcX-12,hcY-8,2,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(hcX+18,hcY-8,2,0,Math.PI*2); ctx.fill();
+
+  // Eyebrows — droop for drowsy
+  const bd = beh==='drowsiness' ? 6 : 0;
+  ctx.strokeStyle='#5c3d1e'; ctx.lineWidth=2.5; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(hcX-23,hcY-17+bd); ctx.quadraticCurveTo(hcX-15,hcY-20+bd,hcX-7,hcY-17+bd); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(hcX+23,hcY-17+bd); ctx.quadraticCurveTo(hcX+15,hcY-20+bd,hcX+7,hcY-17+bd); ctx.stroke();
+
+  // Nose
+  ctx.strokeStyle='#a0724a'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(hcX-3,hcY); ctx.lineTo(hcX-6,hcY+12); ctx.lineTo(hcX-1,hcY+12); ctx.stroke();
+
+  // Mouth
+  ctx.strokeStyle='#8a5030'; ctx.lineWidth=2;
+  if (beh==='eating'||beh==='smoking') {
+    ctx.beginPath(); ctx.arc(hcX,hcY+22,8,0.2,Math.PI-0.2); ctx.stroke(); // open
+  } else {
+    ctx.beginPath(); ctx.moveTo(hcX-10,hcY+22); ctx.quadraticCurveTo(hcX,hcY+27,hcX+10,hcY+22); ctx.stroke();
+  }
+
+  // Hair
+  ctx.fillStyle='#1a0f05';
+  ctx.beginPath(); ctx.ellipse(hcX,hcY-30,41,26,0,Math.PI,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(hcX-38,hcY-10,9,22,-0.3,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(hcX+38,hcY-10,9,22,0.3,0,Math.PI*2); ctx.fill();
+
+  // ── Behavior-specific props ──
+
+  // PHONE: draw phone near right ear + hand holding it
+  if (beh==='phone_use') {
+    ctx.save();
+    const px=hcX+28, py=hcY-20, pw=16, ph=32;
+    ctx.fillStyle='#0f0f1a'; ctx.strokeStyle='#4a9eff'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.roundRect(px,py,pw,ph,3); ctx.fill(); ctx.stroke();
+    // Screen glow
+    ctx.globalAlpha=0.7; ctx.fillStyle='#1a4a8a';
+    ctx.beginPath(); ctx.roundRect(px+2,py+4,pw-4,ph-10,2); ctx.fill();
+    ctx.globalAlpha=0.35; ctx.fillStyle='#7eb8ff';
+    ctx.beginPath(); ctx.roundRect(px+2,py+4,pw-4,ph-10,2); ctx.fill();
+    ctx.globalAlpha=1;
+    // Hand reaching up to hold phone
+    ctx.fillStyle='#c4a882';
+    ctx.beginPath(); ctx.ellipse(px+pw/2, py+ph+2, 10,8, 0,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // SMOKING: cigarette from mouth + smoke wisps
+  if (beh==='smoking') {
+    ctx.save();
+    ctx.fillStyle='#f5f5f0'; ctx.fillRect(hcX+8,hcY+22,28,5);
+    ctx.fillStyle='#f97316';
+    ctx.beginPath(); ctx.arc(hcX+36,hcY+24,3,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=0.55; ctx.fillStyle='#fbbf24';
+    ctx.beginPath(); ctx.arc(hcX+36,hcY+24,6,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=1;
+    // smoke wisps
+    ctx.strokeStyle='rgba(200,200,200,0.35)'; ctx.lineWidth=2;
+    for (let i=0;i<3;i++) {
+      const si=t*0.9+i*0.7;
+      ctx.beginPath(); ctx.moveTo(hcX+36,hcY+24);
+      ctx.quadraticCurveTo(hcX+36+Math.sin(si)*9,hcY+14-i*8,
+                           hcX+36+Math.sin(si+1)*14,hcY-2-i*10);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // EATING: food near mouth + right hand off wheel holding it
+  if (beh==='eating') {
+    ctx.save();
+    const fx=hcX-30, fy=hcY+12;
+    ctx.fillStyle='#d97706'; // bun top
+    ctx.beginPath(); ctx.ellipse(fx,fy,18,8,0,Math.PI,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#78350f'; ctx.fillRect(fx-16,fy+2,32,6); // patty
+    ctx.fillStyle='#15803d'; ctx.beginPath(); ctx.ellipse(fx,fy+6,18,4,0,0,Math.PI); ctx.fill(); // lettuce
+    ctx.fillStyle='#d97706'; ctx.beginPath(); ctx.ellipse(fx,fy+10,18,6,0,0,Math.PI); ctx.fill(); // bun bottom
+    ctx.fillStyle='#c4a882'; ctx.beginPath(); ctx.ellipse(fx,fy+20,12,9,0,0,Math.PI*2); ctx.fill(); // hand
+    ctx.restore();
+  }
+
+  // DISTRACTION: left-side highlight indicating gaze direction
+  if (beh==='distraction') {
+    ctx.save();
+    ctx.fillStyle='rgba(255,165,0,0.08)';
+    ctx.fillRect(0,0,W*0.35,H*0.65);
+    ctx.restore();
+  }
+
+  // HUD bar
+  ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(0,H-24,W,24);
+  ctx.font='11px monospace';
+  ctx.fillStyle='#64748b'; ctx.fillText(new Date().toLocaleTimeString(),8,H-7);
+  if (beh!=='normal') {
+    const LABELS={drowsiness:'DROWSINESS DETECTED',phone_use:'PHONE USE',distraction:'DISTRACTION',
+      no_seatbelt:'NO SEATBELT',hands_off_wheel:'HANDS OFF WHEEL',eating:'EATING',smoking:'SMOKING'};
+    ctx.fillStyle='#ffa657'; ctx.fillText('\u26a0 '+(LABELS[beh]||beh.toUpperCase()), W/2-80, H-7);
+  } else {
+    ctx.fillStyle='#475569'; ctx.fillText('DEMO \u2022 cam-synth-001 \u2022 640\u00d7360 @ 30fps', W/2-108, H-7);
+  }
+  ctx.fillStyle='#3fb950'; ctx.fillText('\u25cf LIVE', W-46, H-7);
+}
+
+/* ── Detection BBox Overlay ─────────────────────────────────────────────── */
+// Normalized (0–1) box regions per alert type {x, y, w, h, label}
+const ALERT_REGIONS = {
+  phone_use:       [{ x:0.52, y:0.04, w:0.24, h:0.50, label:'PHONE' },
+                    { x:0.38, y:0.04, w:0.30, h:0.44, label:'FACE' }],
+  no_seatbelt:     [{ x:0.22, y:0.28, w:0.56, h:0.44, label:'NO SEATBELT' }],
+  smoking:         [{ x:0.30, y:0.04, w:0.40, h:0.50, label:'FACE' },
+                    { x:0.38, y:0.30, w:0.24, h:0.20, label:'SMOKING' }],
+  eating:          [{ x:0.28, y:0.04, w:0.44, h:0.50, label:'FACE' },
+                    { x:0.22, y:0.30, w:0.56, h:0.28, label:'EATING' }],
+  drowsiness:      [{ x:0.26, y:0.03, w:0.48, h:0.52, label:'DROWSY — EYES CLOSED' }],
+  distraction:     [{ x:0.10, y:0.03, w:0.55, h:0.50, label:'DISTRACTED — HEAD TURNED' }],
+  hands_off_wheel: [{ x:0.18, y:0.52, w:0.64, h:0.38, label:'HANDS OFF WHEEL' }],
+};
+
+const SEV_COLOR = { critical:'#f85149', high:'#ffa657', medium:'#d29922', low:'#3fb950' };
+
+const ALERT_BOX_CLASSES = {
+  phone_use: ['phone'],
+  smoking: ['cigarette'],
+  eating: ['foodItem'],
+};
+
+const ALERT_BOX_LABELS = {
+  phone: 'PHONE',
+  cigarette: 'SMOKING',
+  foodItem: 'EATING',
+};
+
+function alertBoxesToOverlayRegions(alert) {
+  const frameWidth = Number(alert?.frame_width);
+  const frameHeight = Number(alert?.frame_height);
+  const allowedClasses = ALERT_BOX_CLASSES[alert?.type];
+  const sourceBoxes = Array.isArray(alert?.boxes) ? alert.boxes : [];
+  if (!frameWidth || !frameHeight || !allowedClasses || !sourceBoxes.length) return null;
+
+  const regions = sourceBoxes
+    .filter(box => allowedClasses.includes(box.cls_name))
+    .map(box => {
+      const xyxy = Array.isArray(box.xyxy) ? box.xyxy.map(Number) : [];
+      if (xyxy.length !== 4 || xyxy.some(Number.isNaN)) return null;
+      const [x1, y1, x2, y2] = xyxy;
+      const x = clamp01(x1 / frameWidth);
+      const y = clamp01(y1 / frameHeight);
+      const w = Math.min(clamp01((x2 - x1) / frameWidth), 1 - x);
+      const h = Math.min(clamp01((y2 - y1) / frameHeight), 1 - y);
+      if (w <= 0 || h <= 0) return null;
+      const baseLabel = ALERT_BOX_LABELS[box.cls_name] || String(box.cls_name || alert.type).toUpperCase();
+      return {
+        x,
+        y,
+        w,
+        h,
+        label: typeof box.conf === 'number' ? `${baseLabel}  ${(box.conf * 100).toFixed(0)}%` : baseLabel,
+      };
+    })
+    .filter(Boolean);
+
+  return regions.length ? regions : null;
+}
+
+function triggerDetectionOverlay(alertType, severity, scores, customBoxes) {
+  const regions = customBoxes || ALERT_REGIONS[alertType];
+  if (!regions) return;
+  const color = SEV_COLOR[severity] || '#f85149';
+  // Build conf label from scores (skip if label already has %)
+  const scoreMap = {
+    phone_use: scores?.phone, no_seatbelt: scores ? (1-(scores.seatbelt||1)) : undefined,
+    smoking: scores?.smoking, eating: scores?.eating, drowsiness: scores?.drowsy,
+    distraction: scores?.distracted, hands_off_wheel: scores?.hand_off_wheel
+  };
+  const conf = scoreMap[alertType];
+  const boxes = regions.map(r => ({
+    ...r,
+    color: r.color || color,
+    label: (conf !== undefined && !String(r.label).includes('%'))
+      ? `${r.label}  ${(conf*100).toFixed(0)}%` : r.label
+  }));
+  activeBoxes.push({ boxes, createdAt: Date.now(), ttl: 4500 });
+  if (!canvasRafId) startCanvasDraw();
+}
+
+function startCanvasDraw() {
+  const canvas = $('streamCanvas');
+  const video  = $('streamVideo');
+  const ctx    = canvas.getContext('2d');
+  function draw() {
+    const W = video.clientWidth || canvas.offsetWidth;
+    const H = video.clientHeight || canvas.offsetHeight;
+    if (canvas.width !== W)  canvas.width  = W;
+    if (canvas.height !== H) canvas.height = H;
+    ctx.clearRect(0, 0, W, H);
+    const now = Date.now();
+    for (let i = activeBoxes.length - 1; i >= 0; i--) {
+      if (now - activeBoxes[i].createdAt > activeBoxes[i].ttl) { activeBoxes.splice(i, 1); continue; }
+    }
+    activeBoxes.forEach(entry => {
+      const age   = now - entry.createdAt;
+      const alpha = age < entry.ttl - 1200 ? 1.0 : Math.max(0, 1 - (age - (entry.ttl - 1200)) / 1200);
+      entry.boxes.forEach(b => drawBBox(ctx, b, W, H, alpha));
+    });
+    canvasRafId = activeBoxes.length > 0 ? requestAnimationFrame(draw) : null;
+  }
+  canvasRafId = requestAnimationFrame(draw);
+}
+
+function drawBBox(ctx, b, W, H, alpha) {
+  const x = b.x * W, y = b.y * H, w = b.w * W, h = b.h * H;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  // Filled semi-transparent rect
+  ctx.fillStyle = b.color + '18';
+  ctx.fillRect(x, y, w, h);
+  // Stroke
+  ctx.strokeStyle = b.color;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, w, h);
+  // Corner L-brackets
+  const cs = Math.min(14, w * 0.12, h * 0.12);
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x + cs, y);         ctx.lineTo(x, y);         ctx.lineTo(x, y + cs);
+  ctx.moveTo(x+w - cs, y);       ctx.lineTo(x+w, y);       ctx.lineTo(x+w, y + cs);
+  ctx.moveTo(x, y+h - cs);       ctx.lineTo(x, y+h);       ctx.lineTo(x + cs, y+h);
+  ctx.moveTo(x+w, y+h - cs);     ctx.lineTo(x+w, y+h);     ctx.lineTo(x+w - cs, y+h);
+  ctx.stroke();
+  // Label pill
+  ctx.font = 'bold 11px "Cascadia Code", monospace';
+  const tw  = ctx.measureText(b.label).width;
+  const lh  = 18;
+  const lx  = x;
+  const ly  = y > lh + 2 ? y - lh - 2 : y + h + 2;
+  ctx.fillStyle = b.color;
+  ctx.globalAlpha = alpha * 0.92;
+  ctx.beginPath();
+  ctx.roundRect(lx, ly, tw + 12, lh, 4);
+  ctx.fill();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#000';
+  ctx.fillText(b.label, lx + 6, ly + 13);
+  ctx.restore();
+}
+
+/* ── Stream Behavior Chart ───────────────────────────────────────────────── */
+function initStreamBehaviorChart() {
+  const ctx = $('streamBehaviorChart').getContext('2d');
+  streamBehaviorChart = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: ['Phone','Seatbelt','Smoking','Eating','Drowsy','Distracted','Hands'],
+      datasets: [{
+        label: 'Score',
+        data: [0,0,0,0,0,0,0],
+        backgroundColor: 'rgba(88,166,255,0.15)',
+        borderColor: '#58a6ff',
+        pointBackgroundColor: '#58a6ff',
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        r: {
+          min: 0, max: 1,
+          ticks: { display: false },
+          grid: { color: '#30363d' },
+          pointLabels: { color: '#8b949e', font: { size: 10 } }
+        }
+      }
+    }
+  });
+}
+
+function updateStreamScores(scores) {
+  if (!scores) return;
+  const fields = {
+    phone:    scores.phone       || 0,
+    seatbelt: 1 - (scores.seatbelt != null ? scores.seatbelt : 1), // inverted: 0 seatbelt score = no belt
+    smoking:  scores.smoking     || 0,
+    eating:   scores.eating      || 0,
+    drowsy:   scores.drowsy      || 0,
+    distract: scores.distracted  || 0,
+    hands:    scores.hand_off_wheel || 0,
+  };
+  if (!rtdEnabled) updateRTD(fields);
+  // Only show side-panel if at least one score is non-trivial
+  const hasSignal = Object.values(fields).some(v => v > 0.05);
+  $('scoresNoData').style.display  = hasSignal ? 'none' : 'block';
+  $('streamScores').style.display  = hasSignal ? 'block' : 'none';
+  if (!hasSignal) return;
+
+  Object.entries(fields).forEach(([k, v]) => {
+    const pct = Math.round(v * 100);
+    $(`sf-${k}`).style.width = pct + '%';
+    $(`sf-${k}`).style.background = colorForScore(v);
+    $(`sv-${k}`).textContent = pct + '%';
+  });
+  lastScoreUpdateTime = Date.now();
+  $('scoresLastUpdate').textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+  // Reset stale timer — hide after 60 s of no new alert
+  if (scoresStaleTimer) clearTimeout(scoresStaleTimer);
+  scoresStaleTimer = setTimeout(() => {
+    $('scoresNoData').style.display = 'block';
+    $('streamScores').style.display = 'none';
+    $('scoresLastUpdate').textContent = 'No data (stale)';
+  }, 60000);
+
+  if (streamBehaviorChart) {
+    streamBehaviorChart.data.datasets[0].data = [
+      fields.phone, fields.seatbelt, fields.smoking, fields.eating,
+      fields.drowsy, fields.distract, fields.hands
+    ];
+    streamBehaviorChart.update();
+  }
+}
+
+/* ── WebSocket Alerts ────────────────────────────────────────────────────── */
+function reconnectWS() {
+  if (!globalTenant) return;
+  if (wsConnection) { wsConnection.close(); wsConnection = null; }
+
+  const url = `ws://localhost:8080/v1/ws/alerts?tenant_id=${globalTenant}`;
+  $('wsUrl').textContent = url;
+  $('wsStatusLabel').innerHTML = '<span class="live-dot"></span>Connecting…';
+
+  try {
+    wsConnection = new WebSocket(url);
+    wsConnection.onopen = () => {
+      $('wsStatusLabel').innerHTML = '<span class="live-dot"></span>Connected';
+      $('wsStatusLabel').style.color = 'var(--green)';
+      $('alertFeedEmpty').style.display = 'none';
+    };
+    wsConnection.onmessage = e => handleWsAlert(e.data);
+    wsConnection.onclose = () => {
+      $('wsStatusLabel').innerHTML = '<span class="live-dot" style="background:var(--yellow)"></span>Disconnected';
+      $('wsStatusLabel').style.color = 'var(--yellow)';
+      setTimeout(reconnectWS, 5000);
+    };
+    wsConnection.onerror = () => {
+      $('wsStatusLabel').innerHTML = '<span class="live-dot" style="background:var(--red)"></span>Error';
+      $('wsStatusLabel').style.color = 'var(--red)';
+    };
+  } catch (e) {
+    $('wsStatusLabel').innerHTML = '<span class="live-dot" style="background:var(--red)"></span>Failed';
+  }
+}
+
+function handleWsAlert(raw) {
+  let a;
+  try { a = JSON.parse(raw); } catch { return; }
+  mergeAlerts([a], true);
+
+  const matchesActiveStream = alertMatchesActiveStream(a);
+
+  // Update only the stream-scoped panel for the currently viewed stream.
+  if (matchesActiveStream) {
+    if (a.scores) updateStreamScores(a.scores);
+    if (a.type && !rtdEnabled) {
+      const liveBoxes = alertBoxesToOverlayRegions(a);
+      triggerDetectionOverlay(a.type, a.severity, a.scores, liveBoxes || undefined);
+    }
+  }
+
+  // Update state counts
+  if (a.state) stateCounts[a.state] = (stateCounts[a.state] || 0) + 1;
+  updateStateChart();
+
+  // Update trend
+  alertTrendData.push({ time: new Date(), type: a.type, severity: a.severity });
+  if (alertTrendData.length > 20) alertTrendData.shift();
+  updateAlertCharts();
+
+  // Alert type counts
+  alertCounts[a.type] = (alertCounts[a.type] || 0) + 1;
+  updateAlertPieChart();
+
+  // Render feed
+  renderAlertFeed();
+
+  // Badge on nav
+  if (!document.getElementById('tab-alerts').classList.contains('active')) {
+    newAlertCount++;
+    const badge = $('alertBadge');
+    badge.style.display = 'inline';
+    badge.textContent = newAlertCount > 99 ? '99+' : newAlertCount;
+  }
+}
+
+function renderAlertFeed() {
+  const feed = $('alertFeed');
+  if (!feed) return;                // alerts tab not in DOM yet
+  const empty = $('alertFeedEmpty');
+  const typeF = $('alertTypeFilter') ? $('alertTypeFilter').value : '';
+  const sevF  = $('alertSevFilter')  ? $('alertSevFilter').value  : '';
+  const filtered = allAlerts.filter(a =>
+    (!typeF || a.type === typeF) && (!sevF || a.severity === sevF)
+  );
+  if (!filtered.length) {
+    if (empty) {
+      empty.style.display = 'block';
+      empty.textContent = allAlerts.length ? 'No alerts match filter' : 'Waiting for alerts…';
+      feed.innerHTML = '';
+      feed.appendChild(empty);
+    }
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  feed.innerHTML = filtered.slice(0,100).map(a => alertRowHTML(a)).join('');
+}
+
+function filterAlerts() { renderAlertFeed(); }
+function clearAlerts()  {
+  allAlerts = []; alertCounts = {}; alertTrendData = [];
+  updateAlertCharts(); updateAlertPieChart();
+  const feed  = $('alertFeed');
+  const empty = $('alertFeedEmpty');
+  if (feed)  feed.innerHTML = '';
+  if (empty) { feed && feed.appendChild(empty); empty.style.display = 'block'; empty.textContent = 'Cleared.'; }
+}
+
+/* ── Historical Events ───────────────────────────────────────────────────── */
+async function loadEvents() {
+  if (!globalTenant) { showMsg('', 'Set a tenant first', false); return; }
+  try {
+    const rows = await apiFetch(`${API}/v1/events?tenant_id=${globalTenant}&limit=100`).then(r => r.json());
+    const tb = $('eventsTbody');
+    if (!rows.length) { tb.innerHTML = '<tr><td colspan="6" class="empty">No events found</td></tr>'; return; }
+    tb.innerHTML = rows.map(r => `
+      <tr>
+        <td class="mono" style="font-size:11px">${fmtTs(r.ts_capture_ns)}</td>
+        <td>${(r.type||'').replace(/_/g,' ')}</td>
+        <td><span class="severity-tag sev-${r.severity}">${r.severity}</span></td>
+        <td><span class="badge ${stateBadgeClass(r.state)}">${r.state}</span></td>
+        <td class="mono">${r.stream_id}</td>
+        <td>${r.evidence_uri
+          ? `<button class="btn sm" onclick="fetchEvidenceById('${r.alert_id}')">&#9654; View</button>`
+          : '<span style="color:var(--text2)">—</span>'}</td>
+      </tr>`).join('');
+  } catch (e) {
+    $('eventsTbody').innerHTML = `<tr><td colspan="6" class="empty" style="color:var(--red)">${e.message}</td></tr>`;
+  }
+}
+
+function stateBadgeClass(state) {
+  const map = { NORMAL:'ok', DISTRACTED:'warn', DROWSY:'purple', UNSAFE:'err', CRITICAL:'err', RECOVERED:'ok' };
+  return map[state] || 'gray';
+}
+
+/* ── Alert Charts ────────────────────────────────────────────────────────── */
+function initAlertCharts() {
+  const ctx1 = $('alertTrendChart').getContext('2d');
+  alertTrendChart = new Chart(ctx1, {
+    type: 'bar',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'Critical', data: [], backgroundColor: '#f85149' },
+        { label: 'High',     data: [], backgroundColor: '#ffa657' },
+        { label: 'Medium',   data: [], backgroundColor: '#d29922' },
+        { label: 'Low',      data: [], backgroundColor: '#3fb950' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#8b949e', font:{size:10} } } },
+      scales: {
+        x: { stacked: true, ticks: { color: '#8b949e', maxRotation: 0, font:{size:9} }, grid: { color: '#30363d' } },
+        y: { stacked: true, ticks: { color: '#8b949e', font:{size:9} }, grid: { color: '#30363d' } }
+      }
+    }
+  });
+
+  const ctx2 = $('alertPieChart').getContext('2d');
+  alertPieChart = new Chart(ctx2, {
+    type: 'pie',
+    data: {
+      labels: ['phone_use','no_seatbelt','smoking','eating','drowsiness','distraction','hands_off_wheel'],
+      datasets: [{ data: [0,0,0,0,0,0,0], backgroundColor: ['#58a6ff','#3fb950','#ffa657','#d2a679','#bc8cff','#f78166','#79c0ff'], borderWidth: 0 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'right', labels: { color: '#8b949e', font:{size:9} } } }
+    }
+  });
+}
+
+function updateAlertCharts() {
+  if (!alertTrendChart) return;
+  const labels = alertTrendData.map(d => d.time.toLocaleTimeString());
+  alertTrendChart.data.labels = labels;
+  const sevs = ['critical','high','medium','low'];
+  sevs.forEach((sev, i) => {
+    alertTrendChart.data.datasets[i].data = alertTrendData.map(d => d.severity === sev ? 1 : 0);
+  });
+  alertTrendChart.update();
+}
+
+function updateAlertPieChart() {
+  if (!alertPieChart) return;
+  const labels = alertPieChart.data.labels;
+  alertPieChart.data.datasets[0].data = labels.map(l => alertCounts[l] || 0);
+  alertPieChart.update();
+}
+
+/* ── Tenants ─────────────────────────────────────────────────────────────── */
+async function loadTenants() {
+  try {
+    const rows = await apiFetch(`${API}/v1/tenants`).then(r => r.json());
+    const tb = $('tenantsTbody');
+    if (!rows.length) { tb.innerHTML = '<tr><td colspan="3" class="empty">No tenants</td></tr>'; return; }
+    tb.innerHTML = rows.map(r => `
+      <tr>
+        <td class="mono">${r.id}</td>
+        <td>${r.name}</td>
+        <td>
+          <button class="btn sm" onclick="useAsTenant('${r.id}')">Use as Active</button>
+        </td>
+      </tr>`).join('');
+  } catch (e) {
+    $('tenantsTbody').innerHTML = `<tr><td colspan="3" class="empty" style="color:var(--red)">${e.message}</td></tr>`;
+  }
+}
+
+function useAsTenant(id) {
+  globalTenant = id;
+  $('globalTenantId').value = id;
+  $('tenantStatus').textContent = `Active tenant: ${id}`;
+  $('tenantStatus').style.color = 'var(--green)';
+  reconnectWS();
+  reconnectInferenceWS();
+  loadOverviewAlerts();
+  loadQuickStats();
+  showMsg('tenantMsg', `Now using tenant: ${id}`, true);
+}
+
+async function createTenant() {
+  const id   = $('nt-id').value.trim();
+  const name = $('nt-name').value.trim();
+  if (!id || !name) { showMsg('tenantMsg', 'Fill in ID and Name', false); return; }
+  try {
+    const r = await apiFetch(`${API}/v1/tenants`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ id, name })
+    });
+    const data = await r.json();
+    showMsg('tenantMsg', r.ok ? 'Tenant created!' : `Error: ${JSON.stringify(data)}`, r.ok);
+    if (r.ok) loadTenants();
+  } catch (e) { showMsg('tenantMsg', e.message, false); }
+}
+
+/* ── Triton ──────────────────────────────────────────────────────────────── */
+async function loadTritonHealth() {
+  const checks = [
+    { id: 'th-live',  url: `${TRITON}/v2/health/live`,  label: 'Live' },
+    { id: 'th-ready', url: `${TRITON}/v2/health/ready`, label: 'Ready' },
+  ];
+  for (const c of checks) {
+    try {
+      const r = await apiFetch(c.url);
+      $(c.id).innerHTML = statusBadge(r.ok, r.ok ? 'OK' : r.status.toString());
+    } catch (e) {
+      $(c.id).innerHTML = `<span class="badge err">Unreachable</span> <span style="font-size:11px;color:var(--text2)">${e.message.includes('CORS')||e.name==='TypeError'?'(CORS?)':''}</span>`;
+    }
+  }
+
+  try {
+    const meta = await apiFetch(`${TRITON}/v2`).then(r => r.json());
+    $('tritonMeta').innerHTML = `<span class="mono" style="font-size:12px">${JSON.stringify(meta, null, 2).slice(0,300)}</span>`;
+  } catch (e) {
+    $('tritonMeta').textContent = 'Could not fetch server metadata (CORS?)';
+  }
+}
+
+async function loadTritonModels() {
+  try {
+    const r = await apiFetch(`${TRITON}/v2/repository/index`, { method: 'POST', body: '{}', headers: {'Content-Type':'application/json'} });
+    const models = await r.json();
+    const tb = $('tritonModelsTbody');
+    if (!models.length) { tb.innerHTML = '<tr><td colspan="4" class="empty">No models loaded</td></tr>'; return; }
+    tb.innerHTML = models.map(m => `
+      <tr>
+        <td class="mono">${m.name}</td>
+        <td>${m.version || '—'}</td>
+        <td><span class="badge ${m.state==='READY'?'ok':m.state==='LOADING'?'warn':'err'}">${m.state||'—'}</span></td>
+        <td>${m.reason || '—'}</td>
+      </tr>`).join('');
+  } catch (e) {
+    $('tritonModelsTbody').innerHTML = `<tr><td colspan="4" class="empty" style="color:var(--red)">${e.message} (CORS?)</td></tr>`;
+  }
+}
+
+async function loadDbModels() {
+  try {
+    const rows = await apiFetch(`${API}/v1/models`).then(r => r.json());
+    const tb = $('dbModelsTbody');
+    if (!rows.length) { tb.innerHTML = '<tr><td colspan="4" class="empty">No models in DB</td></tr>'; return; }
+    tb.innerHTML = rows.map(r => `
+      <tr>
+        <td class="mono">${r.name}</td>
+        <td>${r.version}</td>
+        <td>${r.active ? '<span class="badge ok">Active</span>' : '<span class="badge gray">Inactive</span>'}</td>
+        <td>${r.backend}</td>
+      </tr>`).join('');
+  } catch (e) {
+    $('dbModelsTbody').innerHTML = `<tr><td colspan="4" class="empty" style="color:var(--red)">${e.message}</td></tr>`;
+  }
+}
+
+async function testInfer() {
+  const model = $('inf-model').value.trim();
+  const ver   = $('inf-ver').value.trim();
+  const body  = $('inf-body').value;
+  const url   = ver
+    ? `${TRITON}/v2/models/${model}/versions/${ver}/infer`
+    : `${TRITON}/v2/models/${model}/infer`;
+  const out = $('inf-result');
+  out.textContent = 'Sending…';
+  try {
+    const r = await apiFetch(url, {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body
+    });
+    const data = await r.text();
+    out.textContent = `HTTP ${r.status}\n${data.slice(0,2000)}`;
+    out.style.color = r.ok ? 'var(--text)' : 'var(--red)';
+  } catch (e) {
+    out.textContent = `Error: ${e.message}`;
+    out.style.color = 'var(--red)';
+  }
+}
+
+/* ── MinIO ───────────────────────────────────────────────────────────────── */
+async function checkMinIO() {
+  try {
+    const r = await apiFetch(`${MINIO}/minio/health/live`, { mode: 'no-cors' });
+    $('minio-health').innerHTML = statusBadge(true, 'Online');
+  } catch (e) {
+    // no-cors won't throw network errors for reachable servers, only genuine network failure
+    $('minio-health').innerHTML = `<span class="badge err">Unreachable</span>`;
+  }
+  // Also try the actual health endpoint and report
+  try {
+    const r2 = await apiFetch(`${MINIO}/minio/health/live`);
+    $('minio-health').innerHTML = statusBadge(r2.ok, r2.ok ? 'Online' : 'Degraded');
+  } catch (_) {}
+}
+
+async function loadEvidenceMeta() {
+  try {
+    const data = await apiFetch(`${API}/v1/evidence`).then(r => r.json());
+    $('ev-bucket').textContent = data.bucket || '—';
+    $('qs-bucket').textContent = data.bucket || '—';
+  } catch (e) {
+    $('ev-bucket').textContent = 'Error';
+  }
+}
+
+async function fetchEvidence() {
+  const id = $('ev-alertId').value.trim();
+  if (!id) { showMsg('evidenceMsg', 'Enter an Alert ID', false); return; }
+  fetchEvidenceById(id);
+}
+
+async function fetchEvidenceById(id) {
+  switchTab('storage');
+  $('ev-alertId').value = id;
+  const player = $('evidencePlayer');
+  const video  = $('evidenceVideo');
+  const msg    = $('evidenceMsg');
+  msg.textContent = 'Loading…';
+  msg.style.color = 'var(--text2)';
+  try {
+    const url = `${API}/v1/evidence/${id}`;
+    // Check if evidence exists (HEAD-like check)
+    const r = await apiFetch(url);
+    if (!r.ok) {
+      msg.textContent = `No evidence for alert ${id} (${r.status})`;
+      msg.style.color = 'var(--red)';
+      player.style.display = 'none';
+      return;
+    }
+    video.src = url;
+    player.style.display = 'block';
+    msg.textContent = `Playing evidence for ${id}`;
+    msg.style.color = 'var(--green)';
+    video.play().catch(_=>{});
+  } catch (e) {
+    msg.textContent = `Error: ${e.message}`;
+    msg.style.color = 'var(--red)';
+  }
+}
+
+/* ── Redpanda ────────────────────────────────────────────────────────────── */
+async function loadRpCluster() {
+  try {
+    const r = await apiFetch(`${RP_ADMIN}/v1/cluster`);
+    const data = await r.json();
+    $('rp-status').innerHTML = statusBadge(r.ok, 'Healthy');
+    $('rpClusterDetails').innerHTML = `<pre style="font-size:11px;white-space:pre-wrap">${JSON.stringify(data,null,2).slice(0,500)}</pre>`;
+  } catch (e) {
+    $('rp-status').innerHTML = `<span class="badge err">Unreachable</span>`;
+    $('rpClusterDetails').innerHTML = `<span style="font-size:11px;color:var(--red)">${e.message} — Check CORS or if Redpanda is running</span>`;
+  }
+
+  try {
+    const r = await apiFetch(`${RP_ADMIN}/v1/brokers`);
+    const brokers = await r.json();
+    $('rpBrokers').innerHTML = (brokers.brokers||[]).map(b => `
+      <div class="pill">Broker ${b.node_id} · ${b.host}:${b.port} · <span style="color:var(--green)">${b.is_alive?'Alive':'Dead'}</span></div>
+    `).join('') || 'No brokers data';
+  } catch (e) {
+    $('rpBrokers').textContent = 'Unavailable (CORS?)';
+  }
+}
+
+async function loadTopics() {
+  try {
+    const r = await apiFetch(`${RP_ADMIN}/v1/topics`);
+    const data = await r.json();
+    const topics = data.topics || [];
+    $('topicsList').innerHTML = topics.length
+      ? topics.map(t => `
+          <span class="topic-pill" onclick="$('partitionTopic').value='${t.name}';loadPartitions()">
+            ${t.name} <span class="topic-count">${t.partitions_count || ''}</span>
+          </span>`).join('')
+      : '<div class="empty">No topics found (CORS or Redpanda unavailable)</div>';
+  } catch (e) {
+    $('topicsList').innerHTML = `<div class="empty" style="color:var(--red)">Error: ${e.message} — CORS may be blocking this request</div>`;
+  }
+}
+
+async function loadPartitions() {
+  const topic = $('partitionTopic').value.trim();
+  if (!topic) return;
+  const el = $('partitionDetails');
+  try {
+    const r = await apiFetch(`${RP_ADMIN}/v1/topics/${encodeURIComponent(topic)}/partitions`);
+    const data = await r.json();
+    el.innerHTML = `<pre style="font-size:11px;white-space:pre-wrap">${JSON.stringify(data,null,2).slice(0,1000)}</pre>`;
+  } catch (e) {
+    el.textContent = `Error: ${e.message}`;
+    el.style.color = 'var(--red)';
+  }
+}
+
+/* ── Prometheus / Triton Metrics ─────────────────────────────────────────── */
+async function loadTritonMetrics() {
+  const out = $('tritonMetricsRaw');
+  try {
+    const r = await apiFetch(`${TRITON_M}/metrics`);
+    const text = await r.text();
+    out.value = text;
+    parseTritonMetrics(text);
+  } catch (e) {
+    out.value = `Error loading Triton metrics: ${e.message}\n\nThis is likely a CORS issue.\nVisit http://localhost:8002/metrics directly.`;
+    $('tritonMetricsCards').innerHTML = `<div style="font-size:12px;color:var(--red)">CORS blocked. <a href="http://localhost:8002/metrics" target="_blank">Open directly</a></div>`;
+  }
+}
+
+function parseTritonMetrics(text) {
+  const lines = text.split('\n');
+  const kv = {};
+  lines.forEach(l => {
+    if (l.startsWith('#')) return;
+    const m = l.match(/^([a-z_:][a-z0-9_:]*?)(?:\{[^}]*\})?\s+([0-9e+\-.]+)/i);
+    if (m) kv[m[1]] = parseFloat(m[2]);
+  });
+
+  const interesting = [
+    { key: 'nv_inference_request_success', label: 'Inference Requests (success)' },
+    { key: 'nv_inference_request_failure', label: 'Inference Failures' },
+    { key: 'nv_inference_count',           label: 'Total Inferences' },
+    { key: 'nv_inference_exec_count',      label: 'Exec Count' },
+    { key: 'nv_gpu_utilization',           label: 'GPU Utilization %' },
+    { key: 'nv_gpu_memory_used_bytes',     label: 'GPU Mem Used' },
+    { key: 'nv_gpu_power_usage',           label: 'GPU Power (W)' },
+    { key: 'nv_cpu_utilization',           label: 'CPU Utilization %' },
+  ];
+
+  const cards = $('tritonMetricsCards');
+  cards.innerHTML = interesting.map(item => {
+    const v = kv[item.key];
+    const display = v !== undefined
+      ? (item.label.includes('%') ? (v*100).toFixed(1)+'%' : item.label.includes('bytes') ? fmtBytes(v) : v.toLocaleString())
+      : '—';
+    return `<div class="card" style="padding:10px">
+      <div style="font-size:11px;color:var(--text2)">${item.label}</div>
+      <div style="font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:4px">${display}</div>
+    </div>`;
+  }).join('');
+
+  // Feed charts
+  updateMetricCharts(kv);
+}
+
+function fmtBytes(b) {
+  if (b > 1e9) return (b/1e9).toFixed(1)+' GB';
+  if (b > 1e6) return (b/1e6).toFixed(1)+' MB';
+  if (b > 1e3) return (b/1e3).toFixed(1)+' KB';
+  return b+' B';
+}
+
+async function runPromQuery() {
+  const q   = $('promQuery').value.trim();
+  const out = $('promResult');
+  if (!q) return;
+  out.textContent = 'Running…';
+  try {
+    const url = `${PROMETHEUS}/api/v1/query?query=${encodeURIComponent(q)}`;
+    const r   = await apiFetch(url);
+    const data = await r.json();
+    out.textContent = JSON.stringify(data, null, 2).slice(0, 3000);
+    out.style.color = 'var(--text)';
+  } catch (e) {
+    out.textContent = `Error: ${e.message}\nCORS? Try visiting ${PROMETHEUS}/api/v1/query?query=${encodeURIComponent(q)} directly.`;
+    out.style.color = 'var(--red)';
+  }
+}
+
+/* ── Metric Charts ───────────────────────────────────────────────────────── */
+const metricHistory = { latency: [], reqCount: [], labels: [] };
+
+function initMetricCharts() {
+  if (latencyChart) return;
+
+  const ctxL = $('latencyChart').getContext('2d');
+  latencyChart = new Chart(ctxL, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{ label: 'Inference Count', data: [], borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)', fill: true, tension: 0.3, pointRadius: 2 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+      plugins: { legend: { labels: { color: '#8b949e', font:{size:10} } } },
+      scales: {
+        x: { ticks: { color: '#8b949e', font:{size:9} }, grid: { color: '#30363d' } },
+        y: { ticks: { color: '#8b949e', font:{size:9} }, grid: { color: '#30363d' } }
+      }
+    }
+  });
+
+  const ctxR = $('reqCountChart').getContext('2d');
+  reqCountChart = new Chart(ctxR, {
+    type: 'bar',
+    data: {
+      labels: [],
+      datasets: [{ label: 'Success', data: [], backgroundColor: '#3fb950' }, { label: 'Failed', data: [], backgroundColor: '#f85149' }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+      plugins: { legend: { labels: { color: '#8b949e', font:{size:10} } } },
+      scales: {
+        x: { ticks: { color: '#8b949e', font:{size:9} }, grid: { color: '#30363d' } },
+        y: { ticks: { color: '#8b949e', font:{size:9} }, grid: { color: '#30363d' } }
+      }
+    }
+  });
+}
+
+function updateMetricCharts(kv) {
+  const t = new Date().toLocaleTimeString();
+  metricHistory.labels.push(t);
+  metricHistory.latency.push(kv['nv_inference_count'] || 0);
+  metricHistory.reqCount.push({ s: kv['nv_inference_request_success']||0, f: kv['nv_inference_request_failure']||0 });
+  if (metricHistory.labels.length > 20) {
+    metricHistory.labels.shift();
+    metricHistory.latency.shift();
+    metricHistory.reqCount.shift();
+  }
+
+  if (!latencyChart || !reqCountChart) initMetricCharts();
+  if (latencyChart) {
+    latencyChart.data.labels = metricHistory.labels;
+    latencyChart.data.datasets[0].data = metricHistory.latency;
+    latencyChart.update();
+  }
+  if (reqCountChart) {
+    reqCountChart.data.labels = metricHistory.labels;
+    reqCountChart.data.datasets[0].data = metricHistory.reqCount.map(r => r.s);
+    reqCountChart.data.datasets[1].data = metricHistory.reqCount.map(r => r.f);
+    reqCountChart.update();
+  }
+}
+
+/* ── Health Endpoint Buttons ─────────────────────────────────────────────── */
+async function fetchHealthz() {
+  const out = $('healthResult');
+  try {
+    const r = await apiFetch(`${API}/healthz`);
+    const d = await r.json();
+    out.textContent = `GET ${API}/healthz → HTTP ${r.status}\n${JSON.stringify(d, null, 2)}`;
+    out.style.color = r.ok ? 'var(--green)' : 'var(--red)';
+  } catch (e) { out.textContent = 'Error: '+e.message; out.style.color='var(--red)'; }
+}
+
+async function fetchReadyz() {
+  const out = $('healthResult');
+  try {
+    const r = await apiFetch(`${API}/readyz`);
+    const d = await r.json();
+    out.textContent = `GET ${API}/readyz → HTTP ${r.status}\n${JSON.stringify(d, null, 2)}`;
+    out.style.color = r.ok ? 'var(--green)' : 'var(--red)';
+  } catch (e) { out.textContent = 'Error: '+e.message; out.style.color='var(--red)'; }
+}
+
+async function fetchMinioHealth() {
+  const out = $('healthResult');
+  try {
+    const r = await apiFetch(`${MINIO}/minio/health/live`);
+    out.textContent = `GET ${MINIO}/minio/health/live → HTTP ${r.status}\n${r.ok ? 'MinIO is healthy' : 'MinIO health check failed'}`;
+    out.style.color = r.ok ? 'var(--green)' : 'var(--red)';
+  } catch (e) { out.textContent = 'Error: '+e.message+'\n(CORS may be blocking MinIO)'; out.style.color='var(--red)'; }
+}
+
+/* ── Polling ─────────────────────────────────────────────────────────────── */
+async function poll() {
+  await checkAllServices();
+  if (globalTenant) {
+    loadOverviewAlerts();
+    loadQuickStats();
+  }
+}
+
+setInterval(poll, 15000);
+setInterval(refreshRTDFromSignals, 1000);
+setInterval(() => {
+  // Auto-refresh Triton metrics if on metrics tab
+  if ($('sec-metrics').classList.contains('active')) loadTritonMetrics();
+  if ($('sec-streams').classList.contains('active')) loadStreams();
+}, 30000);
+
+/* ── Init ─────────────────────────────────────────────────────────────────── */
+window.addEventListener('DOMContentLoaded', async () => {
+  buildSvcGrid();
+  initStateChart();
+  initAlertCharts();
+  initStreamBehaviorChart();
+
+  // Initial health check
+  checkAllServices();
+  loadQuickStats();
+
+  // Try to auto-detect first tenant
+  try {
+    const tenants = await apiFetch(`${API}/v1/tenants`).then(r => r.json());
+    if (tenants.length) {
+      const first = tenants[0];
+      $('globalTenantId').value = first.id;
+      useAsTenant(first.id);
+    }
+  } catch (_) {}
+});
+</script>
+</body>
+</html>

@@ -40,6 +40,8 @@ def test_inference_envelope_detection() -> None:
             frame_id=1,
             ts_capture_ns=1,
             model_version="rfdetr-onnx",
+            frame_width=576,
+            frame_height=576,
             latency_ms=12.5,
             boxes=[
                 Box(cls=3, cls_name="phone", conf=0.9, xyxy=(10.0, 20.0, 30.0, 40.0))
@@ -60,8 +62,14 @@ def test_alert_minimal() -> None:
         state=BehaviorStateName.UNSAFE,
         dedupe_key="k",
         scores=BehaviorScores(phone=0.9, seatbelt=1.0),
+        boxes=[Box(cls=3, cls_name="phone", conf=0.9, xyxy=(10.0, 20.0, 30.0, 40.0))],
+        frame_width=1920,
+        frame_height=1080,
     )
-    assert Alert.model_validate_json(a.model_dump_json()).alert_id == "a1"
+    roundtrip = Alert.model_validate_json(a.model_dump_json())
+    assert roundtrip.alert_id == "a1"
+    assert roundtrip.boxes[0].cls_name == "phone"
+    assert roundtrip.frame_width == 1920
 
 
 def test_state_payload() -> None:

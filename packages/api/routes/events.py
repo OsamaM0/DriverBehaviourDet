@@ -6,8 +6,12 @@ router = APIRouter()
 
 
 @router.get("")
-async def get_events(tenant_id: str = Query(...), limit: int = 100) -> list[dict]:
-    rows = await list_recent_alerts(tenant_id, limit=limit)
+async def get_events(
+    tenant_id: str = Query(...),
+    limit: int = 100,
+    stream_id: str | None = None,
+) -> list[dict]:
+    rows = await list_recent_alerts(tenant_id, limit=limit, stream_id=stream_id)
     return [
         {
             "alert_id": r.id,

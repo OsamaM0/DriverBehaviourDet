@@ -56,10 +56,10 @@ async def update_alert_evidence(alert_id: str, s3_uri: str) -> None:
         await s.commit()
 
 
-async def list_recent_alerts(tenant_id: str, limit: int = 100) -> list[AlertRow]:
+async def list_recent_alerts(tenant_id: str, limit: int = 100, stream_id: str | None = None) -> list[AlertRow]:
     async with SessionLocal() as s:
-        res = await s.execute(
-            select(AlertRow).where(AlertRow.tenant_id == tenant_id)
-            .order_by(AlertRow.ts_capture_ns.desc()).limit(limit)
-        )
+        stmt = select(AlertRow).where(AlertRow.tenant_id == tenant_id)
+        if stream_id:
+            stmt = stmt.where(AlertRow.stream_id == stream_id)
+        res = await s.execute(stmt.order_by(AlertRow.ts_capture_ns.desc()).limit(limit))
         return list(res.scalars().all())

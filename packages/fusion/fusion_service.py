@@ -22,9 +22,11 @@ from packages.common.obs.metrics import ALERTS_DEDUPED, ALERTS_EMITTED, STATE_TR
 from packages.common.redis import get_redis
 from packages.common.schemas import (
     Alert,
+    AlertType,
     BehaviorScores,
     BehaviorState,
     BehaviorStateName,
+    Box,
     InferenceEnvelope,
 )
 from packages.fusion.state_machine import StateRecord, Thresholds, commit, evaluate
@@ -38,6 +40,12 @@ ALERT_COOLDOWN_MS = 30_000
 EAR_DROWSY_THRESHOLD = 0.21          # eyes closed below this
 DISTRACT_YAW_DEG = 30.0
 DISTRACT_PITCH_DEG = 20.0
+
+ALERT_BOX_CLASS_NAMES: dict[AlertType, set[str]] = {
+    AlertType.PHONE_USE: {"phone"},
+    AlertType.SMOKING: {"cigarette"},
+    AlertType.EATING: {"foodItem"},
+}
 
 
 def _signals_from_envelope(env: InferenceEnvelope) -> dict[str, float]:
@@ -75,16 +83,50 @@ def _scores_from_window(win) -> BehaviorScores:
     # treat seatbelt as latest (probability seatbelt is present); default 1.0 (assume present)
     seatbelt = win.latest("seatbelt") if win.samples else 1.0
     drowsy = max(win.ewma.get("drowsy_ear", 0.0), win.ewma.get("drowsy_eye", 0.0))
-    hand_on_wheel = win.fraction_above("hand_on_wheel", 0.5)
+    has_hand_signal = any("hand_on_wheel" in sample.values for sample in win.samples)
+    hand_on_wheel = win.fraction_above("hand_on_wheel", 0.5) if has_hand_signal else 1.0
     return BehaviorScores(
         phone=win.fraction_above("phone", 0.5),
         seatbelt=seatbelt or 1.0,
-        smoking=win.fraction_above("smoking", 0.5),
+        smoking=win.fraction_above("smoking", 0.2),
         eating=win.fraction_above("eating", 0.5),
         drowsy=drowsy,
         distracted=win.ewma.get("distracted", 0.0),
         hand_off_wheel=1.0 - hand_on_wheel,
     )
+
+
+def _remember_detection_context(state_rec: StateRecord, env: InferenceEnvelope) -> None:
+    if env.kind != "detection" or env.detection is None:
+        return
+    state_rec.latest_detection_boxes = list(env.detection.boxes)
+    state_rec.latest_detection_frame_width = env.detection.frame_width
+    state_rec.latest_detection_frame_height = env.detection.frame_height
+    state_rec.latest_detection_ts_ns = env.ts_capture_ns or time.time_ns()
+
+
+def _visual_context_for_alert(
+    state_rec: StateRecord,
+    alert_type: AlertType,
+    event_ts_ns: int,
+    max_age_ms: int = WINDOW_MS,
+) -> tuple[list[Box], int | None, int | None]:
+    cls_names = ALERT_BOX_CLASS_NAMES.get(alert_type)
+    if not cls_names:
+        return [], None, None
+    if (
+        not state_rec.latest_detection_boxes
+        or state_rec.latest_detection_frame_width is None
+        or state_rec.latest_detection_frame_height is None
+        or state_rec.latest_detection_ts_ns == 0
+    ):
+        return [], None, None
+    if abs(event_ts_ns - state_rec.latest_detection_ts_ns) > max_age_ms * 1_000_000:
+        return [], None, None
+    boxes = [b for b in state_rec.latest_detection_boxes if b.cls_name in cls_names]
+    if not boxes:
+        return [], None, None
+    return boxes, state_rec.latest_detection_frame_width, state_rec.latest_detection_frame_height
 
 
 async def _set_fps_hint(stream_id: str, state: BehaviorStateName) -> None:
@@ -107,12 +149,14 @@ async def _maybe_emit_alert(
     cooldown_ms: int = ALERT_COOLDOWN_MS,
 ) -> None:
     now_ns = time.time_ns()
+    event_ts_ns = env.ts_capture_ns or now_ns
     for alert_type, severity in alerts:
         last = state_rec.last_alerts.get(alert_type, 0)
         if now_ns - last < cooldown_ms * 1_000_000:
             ALERTS_DEDUPED.labels(type=alert_type.value).inc()
             continue
         state_rec.last_alerts[alert_type] = now_ns
+        alert_boxes, frame_width, frame_height = _visual_context_for_alert(state_rec, alert_type, event_ts_ns)
         a = Alert(
             tenant_id=env.tenant_id,
             stream_id=env.stream_id,
@@ -123,6 +167,9 @@ async def _maybe_emit_alert(
             state=decision_state,
             dedupe_key=_dedupe_key(env.stream_id, alert_type.value, cooldown_ms),
             scores=scores,
+            boxes=alert_boxes,
+            frame_width=frame_width,
+            frame_height=frame_height,
         )
         await bus.send(settings.topic_events_alert, a, key=env.stream_id)
         ALERTS_EMITTED.labels(type=alert_type.value, severity=severity.value).inc()
@@ -135,6 +182,8 @@ async def main() -> None:
     th = Thresholds()  # TODO: per-tenant override
 
     async def handler(env: InferenceEnvelope) -> None:
+        rec = states[env.stream_id]
+        _remember_detection_context(rec, env)
         signals = _signals_from_envelope(env)
         if not signals:
             return
@@ -142,7 +191,6 @@ async def main() -> None:
         win.add(signals, ts_ns=env.ts_capture_ns or time.time_ns(), window_ms=WINDOW_MS)
 
         scores = _scores_from_window(win)
-        rec = states[env.stream_id]
         decision = evaluate(rec, scores, th)
 
         if decision.transitioned:

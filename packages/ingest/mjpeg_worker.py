@@ -50,11 +50,11 @@ async def _frames_from_mjpeg(url: str):
                     del buf[: eoi + 2]
 
 
-async def ingest_one(stream_id: str, tenant_id: str, url: str) -> None:
+async def ingest_one(stream_id: str, tenant_id: str, url: str) -> bool:
     owner = worker_id()
     if not await claim(stream_id, owner):
         log.warning("stream_already_owned", stream_id=stream_id)
-        return
+        return False
     stop = asyncio.Event()
     lease_task = asyncio.create_task(hold_lease(stream_id, owner, stop))
     period = 1.0 / max(1, settings.ingest_base_fps)
@@ -91,11 +91,24 @@ async def ingest_one(stream_id: str, tenant_id: str, url: str) -> None:
         stop.set()
         lease_task.cancel()
         await bus.close()
+    return True
+
+
+async def main() -> None:
+    stream_id = os.environ.get("STREAM_ID", "dev-stream")
+    tenant_id = os.environ.get("TENANT_ID", "dev-tenant")
+    url = os.environ["STREAM_URL"]
+    max_attempts = 30
+    retry_delay = 5
+    for attempt in range(1, max_attempts + 1):
+        acquired = await ingest_one(stream_id, tenant_id, url)
+        if acquired:
+            return
+        if attempt >= max_attempts:
+            raise RuntimeError(f"could not acquire lease for {stream_id}")
+        log.warning("stream_lease_retry", stream_id=stream_id, attempt=attempt, retry_in=retry_delay)
+        await asyncio.sleep(retry_delay)
 
 
 if __name__ == "__main__":
-    asyncio.run(ingest_one(
-        os.environ.get("STREAM_ID", "dev-stream"),
-        os.environ.get("TENANT_ID", "dev-tenant"),
-        os.environ["STREAM_URL"],
-    ))
+    asyncio.run(main())

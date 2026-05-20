@@ -84,11 +84,11 @@ async def _fps_for_stream(stream_id: str) -> int:
     return settings.ingest_base_fps
 
 
-async def ingest_one(stream_id: str, tenant_id: str, url: str) -> None:
+async def ingest_one(stream_id: str, tenant_id: str, url: str) -> bool:
     owner = worker_id()
     if not await claim(stream_id, owner):
         log.warning("stream_already_owned", stream_id=stream_id)
-        return
+        return False
 
     stop = asyncio.Event()
     lease_task = asyncio.create_task(hold_lease(stream_id, owner, stop))
@@ -177,6 +177,7 @@ async def ingest_one(stream_id: str, tenant_id: str, url: str) -> None:
         container.close()
         await bus.close()
         log.info("rtsp_closed", stream_id=stream_id)
+    return True
 
 
 async def main() -> None:
@@ -187,7 +188,14 @@ async def main() -> None:
     retry_delay = 5
     for attempt in range(1, max_attempts + 1):
         try:
-            await ingest_one(stream_id, tenant_id, url)
+            acquired = await ingest_one(stream_id, tenant_id, url)
+            if not acquired:
+                if attempt >= max_attempts:
+                    log.error("stream_lease_claim_failed", stream_id=stream_id, attempts=attempt)
+                    raise RuntimeError(f"could not acquire lease for {stream_id}")
+                log.warning("stream_lease_retry", stream_id=stream_id, attempt=attempt, retry_in=retry_delay)
+                await asyncio.sleep(retry_delay)
+                continue
             break  # completed normally
         except (OSError, Exception) as exc:  # noqa: BLE001
             if "Connection refused" not in str(exc) and "Connection timed out" not in str(exc):

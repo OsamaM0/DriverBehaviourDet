@@ -11,6 +11,14 @@ def test_window_fraction_above() -> None:
     assert w.fraction_above("phone", 0.5) == 0.5
 
 
+def test_window_fraction_above_ignores_missing_signal_samples() -> None:
+    w = StreamWindow()
+    now = time.time_ns()
+    w.add({"smoking": 0.9}, ts_ns=now, window_ms=1000)
+    w.add({"distracted": 0.9}, ts_ns=now + 100_000_000, window_ms=1000)
+    assert w.fraction_above("smoking", 0.5) == 1.0
+
+
 def test_window_ewma_smoothing() -> None:
     w = StreamWindow()
     now = time.time_ns()

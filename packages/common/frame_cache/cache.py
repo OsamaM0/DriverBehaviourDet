@@ -1,8 +1,9 @@
 """
 Frame cache: store decoded frame bytes off the Kafka path.
 
-Default backend is Redis with a short TTL (≤ frame_cache_ttl_sec). For larger
-frames or longer TTLs we'd swap in MinIO/S3 with the same interface.
+Default backend is Redis with a short TTL. The default needs enough slack for
+Kafka consumer lag and downstream inference latency; otherwise consumers will
+see frame refs whose bytes have already expired.
 """
 from __future__ import annotations
 
